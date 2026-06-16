@@ -1,0 +1,749 @@
+// =============================================================================
+// PRISMA SCHEMA - EduPlatform
+// PostgreSQL | Soft Delete | Timestamps | Auditoría | Índices optimizados
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum ResourceType {
+  PDF
+  VIDEO
+  IMAGE
+  AUDIO
+  LINK
+  DOCUMENT
+  PRESENTATION
+  OTHER
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+  RETURNED
+  LATE
+}
+
+enum MissionType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  SPECIAL
+  ACHIEVEMENT
+}
+
+enum MissionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  LOCKED
+}
+
+enum BadgeCategory {
+  ACADEMIC
+  PARTICIPATION
+  STREAK
+  SOCIAL
+  SPECIAL
+  MILESTONE
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum EvaluationType {
+  QUIZ
+  EXAM
+  ORAL
+  PROJECT
+  PRACTICAL
+  HOMEWORK
+  PARTICIPATION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  RESTORE
+}
+
+// =============================================================================
+// MODELOS CORE
+// =============================================================================
+
+model Role {
+  id          String    @id @default(cuid())
+  name        RoleName  @unique
+  description String?
+  permissions Json      @default("[]") // Array de permisos granulares
+  
+  users       User[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  username       String    @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  avatar         String?
+  bio            String?
+  phone          String?
+  birthDate      DateTime?
+  isEmailVerified Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  
+  // Soft delete
+  deletedAt      DateTime?
+  deletedBy      String?
+
+  // Relaciones
+  roleId         String
+  role           Role      @relation(fields: [roleId], references: [id])
+  
+  // Relaciones educativas
+  taughtClasses  Class[]   @relation("TeacherClasses")
+  enrollments    Enrollment[]
+  
+  // Gamificación
+  experience     Experience?
+  achievements   UserAchievement[]
+  badges         UserBadge[]
+  rankingEntries RankingEntry[]
+  missionProgress UserMissionProgress[]
+  progress       Progress[]
+  
+  // Contenido
+  createdAssignments    Assignment[] @relation("AssignmentCreator")
+  submissions           Submission[]
+  gradesGiven           Grade[]      @relation("GradeGiver")
+  gradesReceived        Grade[]      @relation("GradeReceiver")
+  uploadedResources     Resource[]
+  
+  // Tokens
+  refreshTokens  RefreshToken[]
+  
+  // Auditoría
+  auditLogs      AuditLog[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([email])
+  @@index([username])
+  @@index([roleId])
+  @@index([deletedAt])
+  @@index([isActive, deletedAt])
+  @@map("users")
+}
+
+// =============================================================================
+// CONTENIDO ACADÉMICO
+// =============================================================================
+
+model Subject {
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  description String?
+  color       String?   @default("#6366f1") // Color para UI
+  icon        String?
+  credits     Int       @default(0)
+  
+  // Soft delete
+  deletedAt   DateTime?
+  deletedBy   String?
+
+  classes     Class[]
+  resources   Resource[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([code])
+  @@index([deletedAt])
+  @@map("subjects")
+}
+
+model Class {
+  id           String    @id @default(cuid())
+  name         String
+  code         String    @unique
+  description  String?
+  startDate    DateTime
+  endDate      DateTime
+  maxStudents  Int       @default(30)
+  isActive     Boolean   @default(true)
+  
+  // Soft delete
+  deletedAt    DateTime?
+  deletedBy    String?
+
+  // Relaciones
+  subjectId    String
+  subject      Subject   @relation(fields: [subjectId], references: [id])
+  teacherId    String
+  teacher      User      @relation("TeacherClasses", fields: [teacherId], references: [id])
+  
+  enrollments       Enrollment[]
+  presentations     Presentation[]
+  assignments       Assignment[]
+  evaluations       Evaluation[]
+  rankings          Ranking[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([subjectId])
+  @@index([teacherId])
+  @@index([code])
+  @@index([deletedAt])
+  @@index([isActive, deletedAt])
+  @@map("classes")
+}
+
+model Enrollment {
+  id        String    @id @default(cuid())
+  userId    String
+  classId   String
+  enrolledAt DateTime  @default(now())
+  
+  // Soft delete
+  deletedAt DateTime?
+  
+  user      User      @relation(fields: [userId], references: [id])
+  class     Class     @relation(fields: [classId], references: [id])
+  
+  progress  Progress[]
+
+  @@unique([userId, classId])
+  @@index([userId])
+  @@index([classId])
+  @@index([deletedAt])
+  @@map("enrollments")
+}
+
+model Presentation {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  order       Int       @default(0)
+  duration    Int?      // minutos estimados
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  
+  // Soft delete
+  deletedAt   DateTime?
+  deletedBy   String?
+
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id])
+  
+  resources   Resource[]
+  progress    Progress[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([isPublished])
+  @@index([deletedAt])
+  @@map("presentations")
+}
+
+model Resource {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  type         ResourceType
+  url          String
+  fileSize     Int?         // bytes
+  mimeType     String?
+  duration     Int?         // segundos (para video/audio)
+  order        Int          @default(0)
+  isPublic     Boolean      @default(false)
+  
+  // Soft delete
+  deletedAt    DateTime?
+  deletedBy    String?
+
+  presentationId String?
+  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+
+  subjectId      String?
+  subject        Subject?      @relation(fields: [subjectId], references: [id])
+  
+  uploadedById   String
+  uploadedBy     User          @relation(fields: [uploadedById], references: [id])
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([presentationId])
+  @@index([uploadedById])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("resources")
+}
+
+// =============================================================================
+// EVALUACIÓN Y CALIFICACIONES
+// =============================================================================
+
+model Evaluation {
+  id           String         @id @default(cuid())
+  title        String
+  description  String?
+  type         EvaluationType
+  maxScore     Float          @default(100)
+  weight       Float          @default(1.0) // Peso en calificación final
+  dueDate      DateTime?
+  isPublished  Boolean        @default(false)
+  
+  // Soft delete
+  deletedAt    DateTime?
+  deletedBy    String?
+
+  classId      String
+  class        Class          @relation(fields: [classId], references: [id])
+  
+  grades       Grade[]
+  assignments  Assignment[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("evaluations")
+}
+
+model Grade {
+  id           String    @id @default(cuid())
+  score        Float
+  maxScore     Float
+  percentage   Float     // Calculado: (score/maxScore)*100
+  feedback     String?
+  isPublished  Boolean   @default(false)
+  publishedAt  DateTime?
+  
+  // Soft delete
+  deletedAt    DateTime?
+
+  studentId    String
+  student      User      @relation("GradeReceiver", fields: [studentId], references: [id])
+  
+  gradedById   String
+  gradedBy     User      @relation("GradeGiver", fields: [gradedById], references: [id])
+  
+  evaluationId String?
+  evaluation   Evaluation? @relation(fields: [evaluationId], references: [id])
+  
+  submissionId String?   @unique
+  submission   Submission? @relation(fields: [submissionId], references: [id])
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([gradedById])
+  @@index([evaluationId])
+  @@index([deletedAt])
+  @@map("grades")
+}
+
+model Assignment {
+  id           String           @id @default(cuid())
+  title        String
+  description  String
+  instructions String?
+  maxScore     Float            @default(100)
+  dueDate      DateTime
+  allowLate    Boolean          @default(false)
+  latePenalty  Float            @default(0) // porcentaje de penalización
+  status       AssignmentStatus @default(DRAFT)
+  
+  // Soft delete
+  deletedAt    DateTime?
+  deletedBy    String?
+
+  classId      String
+  class        Class            @relation(fields: [classId], references: [id])
+  
+  createdById  String
+  createdBy    User             @relation("AssignmentCreator", fields: [createdById], references: [id])
+  
+  evaluationId String?
+  evaluation   Evaluation?      @relation(fields: [evaluationId], references: [id])
+  
+  submissions  Submission[]
+  
+  // XP recompensa por completar
+  xpReward     Int              @default(0)
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([createdById])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+  @@map("assignments")
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  content      String?
+  fileUrls     Json             @default("[]") // Array de URLs
+  isLate       Boolean          @default(false)
+  submittedAt  DateTime         @default(now())
+  status       SubmissionStatus @default(SUBMITTED)
+  
+  studentId    String
+  student      User             @relation(fields: [studentId], references: [id])
+  
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  
+  grade        Grade?
+
+  @@unique([studentId, assignmentId])
+  @@index([studentId])
+  @@index([assignmentId])
+  @@index([status])
+  @@map("submissions")
+}
+
+// =============================================================================
+// GAMIFICACIÓN
+// =============================================================================
+
+model Level {
+  id           String    @id @default(cuid())
+  number       Int       @unique
+  name         String
+  description  String?
+  xpRequired   Int       // XP mínimo para alcanzar este nivel
+  xpMax        Int       // XP máximo antes del siguiente nivel
+  badge        String?   // URL del badge de nivel
+  perks        Json      @default("[]") // Beneficios del nivel
+  
+  experiences  Experience[]
+
+  @@index([number])
+  @@index([xpRequired])
+  @@map("levels")
+}
+
+model Experience {
+  id           String    @id @default(cuid())
+  totalXp      Int       @default(0)
+  currentXp    Int       @default(0) // XP en nivel actual
+  
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id])
+  
+  levelId      String
+  level        Level     @relation(fields: [levelId], references: [id])
+  
+  xpHistory    XpTransaction[]
+
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([levelId])
+  @@index([totalXp])
+  @@map("experiences")
+}
+
+model XpTransaction {
+  id           String    @id @default(cuid())
+  amount       Int       // Puede ser negativo
+  reason       String
+  source       String    // "assignment", "mission", "achievement", etc.
+  sourceId     String?
+  
+  experienceId String
+  experience   Experience @relation(fields: [experienceId], references: [id])
+
+  createdAt    DateTime  @default(now())
+
+  @@index([experienceId])
+  @@index([source])
+  @@map("xp_transactions")
+}
+
+model Achievement {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  description  String
+  icon         String
+  xpReward     Int           @default(0)
+  criteria     Json          // Condiciones para obtenerlo
+  isSecret     Boolean       @default(false)
+  category     BadgeCategory
+  
+  userAchievements UserAchievement[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([category])
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String    @id @default(cuid())
+  unlockedAt    DateTime  @default(now())
+  
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+  @@map("user_achievements")
+}
+
+model Badge {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  description  String
+  image        String
+  category     BadgeCategory
+  xpRequired   Int?
+  criteria     Json?
+  isLimited    Boolean       @default(false) // Badges de edición limitada
+  
+  userBadges   UserBadge[]
+
+  createdAt    DateTime  @default(now())
+
+  @@index([category])
+  @@map("badges")
+}
+
+model UserBadge {
+  id           String    @id @default(cuid())
+  earnedAt     DateTime  @default(now())
+  isDisplayed  Boolean   @default(false) // Badge destacado en perfil
+  
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  
+  badgeId      String
+  badge        Badge     @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+  @@map("user_badges")
+}
+
+model Mission {
+  id           String        @id @default(cuid())
+  title        String
+  description  String
+  type         MissionType
+  xpReward     Int           @default(0)
+  criteria     Json          // { action: "submit_assignment", count: 3, ... }
+  startDate    DateTime?
+  endDate      DateTime?
+  isActive     Boolean       @default(true)
+  
+  userProgress UserMissionProgress[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@index([endDate])
+  @@map("missions")
+}
+
+model UserMissionProgress {
+  id           String        @id @default(cuid())
+  progress     Int           @default(0) // Progreso actual
+  target       Int           // Objetivo total
+  status       MissionStatus @default(ACTIVE)
+  completedAt  DateTime?
+  
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  
+  missionId    String
+  mission      Mission       @relation(fields: [missionId], references: [id])
+
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, missionId])
+  @@index([userId])
+  @@index([missionId])
+  @@index([status])
+  @@map("user_mission_progress")
+}
+
+model Ranking {
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  period       String    // "weekly", "monthly", "all_time"
+  startDate    DateTime?
+  endDate      DateTime?
+  isActive     Boolean   @default(true)
+  
+  classId      String?
+  class        Class?    @relation(fields: [classId], references: [id])
+  
+  entries      RankingEntry[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([period])
+  @@index([isActive])
+  @@map("rankings")
+}
+
+model RankingEntry {
+  id           String    @id @default(cuid())
+  position     Int
+  score        Float
+  metadata     Json?     // Datos extra del ranking
+  
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  
+  rankingId    String
+  ranking      Ranking   @relation(fields: [rankingId], references: [id])
+  
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, rankingId])
+  @@index([rankingId, position])
+  @@index([userId])
+  @@map("ranking_entries")
+}
+
+model Progress {
+  id           String         @id @default(cuid())
+  percentage   Float          @default(0)
+  timeSpent    Int            @default(0) // segundos
+  completedAt  DateTime?
+  status       ProgressStatus @default(NOT_STARTED)
+  lastActivity DateTime?
+  
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  
+  enrollmentId   String
+  enrollment     Enrollment    @relation(fields: [enrollmentId], references: [id])
+  
+  presentationId String?
+  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([enrollmentId])
+  @@index([presentationId])
+  @@index([status])
+  @@map("progress")
+}
+
+// =============================================================================
+// AUTENTICACIÓN
+// =============================================================================
+
+model RefreshToken {
+  id           String    @id @default(cuid())
+  token        String    @unique
+  expiresAt    DateTime
+  isRevoked    Boolean   @default(false)
+  userAgent    String?
+  ipAddress    String?
+  
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+
+  createdAt    DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// AUDITORÍA
+// =============================================================================
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  action       AuditAction
+  entity       String      // Nombre del modelo
+  entityId     String
+  oldValues    Json?
+  newValues    Json?
+  ipAddress    String?
+  userAgent    String?
+  
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id])
+
+  createdAt    DateTime    @default(now())
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

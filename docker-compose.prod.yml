@@ -1,0 +1,75 @@
+# =============================================================================
+# Docker Compose - Producción
+# =============================================================================
+
+services:
+  # ── App Next.js ─────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eduplatform_app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-15m}
+      JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
+      JWT_ISSUER: ${JWT_ISSUER:-eduplatform}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-eduplatform-users}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - eduplatform_net
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: eduplatform_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eduplatform_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eduplatform_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-eduplatform_db}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - eduplatform_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eduplatform_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nginx Reverse Proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: eduplatform_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - eduplatform_net
+
+volumes:
+  postgres_prod_data:
+    name: eduplatform_postgres_prod_data
+
+networks:
+  eduplatform_net:
+    name: eduplatform_prod_network
+    driver: bridge
