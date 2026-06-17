@@ -4,7 +4,7 @@
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
-ARG CACHEBUST=2
+ARG CACHEBUST=3
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -14,6 +14,8 @@ RUN npx prisma generate
 
 # ── Stage 2: Builder ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
+ARG CACHEBUST=3
+RUN echo "bust: $CACHEBUST"
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
