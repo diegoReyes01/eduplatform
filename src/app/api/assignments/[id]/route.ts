@@ -8,7 +8,7 @@ async function getUserId(req: NextRequest) {
   if (!token) return null;
   try {
     const payload = verifyAccessToken(token);
-    return (payload as any).userId ?? payload.sub;
+    return (payload as any).userId ?? (payload as any).sub;
   } catch {
     return null;
   }

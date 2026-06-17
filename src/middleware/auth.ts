@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken, extractBearerToken } from '@/lib/auth/jwt';
 import { prisma } from '@/lib/db/prisma';
-import { RoleName } from '@/types';
+import { RoleName } from '@prisma/client';
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: {

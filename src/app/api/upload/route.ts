@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userId = (payload as any).userId ?? payload.sub;
+    const userId = (payload as any).userId ?? (payload as any).sub;
 
     if (!userId) {
       return NextResponse.json(

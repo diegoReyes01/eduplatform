@@ -58,7 +58,7 @@ export default function Sidebar() {
   const isTeacherOrAbove = role === "TEACHER" || role === "ADMIN" || role === "SUPER_ADMIN";
   const isAdminOrAbove = role === "ADMIN" || role === "SUPER_ADMIN";
 
-  const renderItem = ({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => {
+  const renderItem = ({ href, label, icon: Icon }: { href: string; label: string; icon: any }) => {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <Link key={href} href={href}>

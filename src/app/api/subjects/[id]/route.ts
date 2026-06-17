@@ -1,20 +1,27 @@
-// GET /api/subjects/[id] — Ver materia
-// PATCH /api/subjects/[id] — Editar materia
-// DELETE /api/subjects/[id] — Eliminar materia (soft delete)
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { withMinRole } from "@/middleware/auth";
+import { verifyAccessToken, extractBearerToken } from "@/lib/auth/jwt";
 import { errorResponse, successResponse, ErrorCodes } from "@/types";
 
-// GET — Ver materia por ID
+async function getPayload(req: NextRequest) {
+  const token = extractBearerToken(req.headers.get("Authorization"));
+  if (!token) return null;
+  try {
+    return verifyAccessToken(token);
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+
     const subject = await prisma.subject.findFirst({
-      where: { id: params.id, deletedAt: null },
+      where: { id, deletedAt: null },
       include: {
         classes: {
           where: { deletedAt: null },
@@ -47,13 +54,32 @@ export async function GET(
   }
 }
 
-// PATCH — Editar materia
-export const PATCH = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await params;
+    const payload = await getPayload(req);
+    if (!payload) {
+      return NextResponse.json(
+        errorResponse(ErrorCodes.UNAUTHORIZED, "Token inválido"),
+        { status: 401 }
+      );
+    }
+
+    const role = (payload as any).role;
+    if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+      return NextResponse.json(
+        errorResponse(ErrorCodes.FORBIDDEN, "Acceso denegado"),
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => null);
 
     const subject = await prisma.subject.findFirst({
-      where: { id: params.id, deletedAt: null },
+      where: { id, deletedAt: null },
     });
 
     if (!subject) {
@@ -64,13 +90,13 @@ export const PATCH = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
     }
 
     const updated = await prisma.subject.update({
-      where: { id: params.id },
+      where: { id },
       data: {
-        name: body.name?.trim() ?? subject.name,
-        description: body.description?.trim() ?? subject.description,
-        color: body.color ?? subject.color,
-        icon: body.icon ?? subject.icon,
-        credits: body.credits ?? subject.credits,
+        name: body?.name?.trim() ?? subject.name,
+        description: body?.description?.trim() ?? subject.description,
+        color: body?.color ?? subject.color,
+        icon: body?.icon ?? subject.icon,
+        credits: body?.credits ?? subject.credits,
       },
     });
 
@@ -82,13 +108,34 @@ export const PATCH = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
       { status: 500 }
     );
   }
-});
+}
 
-// DELETE — Soft delete
-export const DELETE = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await params;
+    const payload = await getPayload(req);
+    if (!payload) {
+      return NextResponse.json(
+        errorResponse(ErrorCodes.UNAUTHORIZED, "Token inválido"),
+        { status: 401 }
+      );
+    }
+
+    const role = (payload as any).role;
+    if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+      return NextResponse.json(
+        errorResponse(ErrorCodes.FORBIDDEN, "Acceso denegado"),
+        { status: 403 }
+      );
+    }
+
+    const userId = (payload as any).userId ?? (payload as any).sub;
+
     const subject = await prisma.subject.findFirst({
-      where: { id: params.id, deletedAt: null },
+      where: { id, deletedAt: null },
     });
 
     if (!subject) {
@@ -99,10 +146,10 @@ export const DELETE = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
     }
 
     await prisma.subject.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         deletedAt: new Date(),
-        deletedBy: req.user.sub,
+        deletedBy: userId,
       },
     });
 
@@ -114,4 +161,4 @@ export const DELETE = withMinRole("SUPER_ADMIN")(async (req, { params }) => {
       { status: 500 }
     );
   }
-});
+}

@@ -1,5 +1,4 @@
 import { RoleName } from "@prisma/client";
-import { AccessTokenPayload } from "@/lib/auth/jwt";
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -31,7 +30,7 @@ export function errorResponse(
 }
 
 export interface AuthenticatedRequest {
-  user: AccessTokenPayload;
+  user: any;
 }
 
 export interface RegisterInput {

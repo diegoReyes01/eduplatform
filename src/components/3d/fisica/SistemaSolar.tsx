@@ -31,6 +31,7 @@ function Orbita({ radio, inclinacion = 0 }: { radio: number; inclinacion?: numbe
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
   return (
+    // @ts-expect-error - JSX intrinsic "line" se resuelve a R3F en runtime
     <line geometry={geometry}>
       <lineBasicMaterial color="#ffffff" transparent opacity={0.15} />
     </line>

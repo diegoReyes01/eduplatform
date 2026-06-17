@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Trophy, Star, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -15,35 +15,15 @@ import {
   Cell,
 } from "recharts";
 
-const rankingData = [
-  { posicion: 1, nombre: "Ana Martínez", username: "@ana_m", xp: 1250, nivel: 5, avatar: "AM", tendencia: "up" },
-  { posicion: 2, nombre: "Carlos López", username: "@carlos_l", xp: 1100, nivel: 4, avatar: "CL", tendencia: "up" },
-  { posicion: 3, nombre: "Diego Reyes", username: "@Naxoo01", xp: 365, nivel: 2, avatar: "DR", tendencia: "same", esYo: true },
-  { posicion: 4, nombre: "María Torres", username: "@maria_t", xp: 320, nivel: 2, avatar: "MT", tendencia: "down" },
-  { posicion: 5, nombre: "Pedro Silva", username: "@pedro_s", xp: 290, nivel: 2, avatar: "PS", tendencia: "down" },
-  { posicion: 6, nombre: "Laura García", username: "@laura_g", xp: 250, nivel: 1, avatar: "LG", tendencia: "up" },
-  { posicion: 7, nombre: "Sofía Ruiz", username: "@sofia_r", xp: 200, nivel: 1, avatar: "SR", tendencia: "same" },
-  { posicion: 8, nombre: "Miguel Díaz", username: "@miguel_d", xp: 180, nivel: 1, avatar: "MD", tendencia: "down" },
-];
-
-const chartData = rankingData.slice(0, 5).map(r => ({
-  nombre: r.nombre.split(" ")[0],
-  xp: r.xp,
-}));
-
-const periodos = ["Esta semana", "Este mes", "Todo el tiempo"];
-
-function getTendenciaIcon(tendencia: string) {
-  if (tendencia === "up") return <TrendingUp size={14} className="text-green-500" />;
-  if (tendencia === "down") return <TrendingDown size={14} className="text-red-500" />;
-  return <Minus size={14} className="text-gray-400" />;
-}
-
-function getMedalColor(posicion: number) {
-  if (posicion === 1) return "text-yellow-500";
-  if (posicion === 2) return "text-gray-400";
-  if (posicion === 3) return "text-orange-400";
-  return "text-gray-300";
+interface RankingEntry {
+  posicion: number;
+  userId: string;
+  nombre: string;
+  username: string;
+  xp: number;
+  nivel: number;
+  esYo: boolean;
+  avatar: string;
 }
 
 function getMedalEmoji(posicion: number) {
@@ -53,113 +33,151 @@ function getMedalEmoji(posicion: number) {
   return posicion.toString();
 }
 
-export default function RankingPage() {
-  const [periodo, setPeriodo] = useState("Esta semana");
+function getMedalColor(posicion: number) {
+  if (posicion === 1) return "text-yellow-500";
+  if (posicion === 2) return "text-gray-400";
+  if (posicion === 3) return "text-orange-400";
+  return "text-gray-300";
+}
 
-  const miPosicion = rankingData.find(r => r.esYo);
+export default function RankingPage() {
+  const [ranking, setRanking] = useState<RankingEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const token = localStorage.getItem("accessToken");
+        const res = await fetch("/api/ranking", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) setRanking(data.data);
+      } catch {
+        // silencioso
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargar();
+  }, []);
+
+  const miPosicion = ranking.find(r => r.esYo);
+  const top5 = ranking.slice(0, 5);
+  const chartData = top5.map(r => ({ nombre: r.nombre.split(" ")[0], xp: r.xp }));
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (ranking.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 className="text-2xl font-bold text-gray-900">Ranking</h1>
+            <p className="text-gray-500 mt-1">Tabla de posiciones</p>
+          </motion.div>
+          <div className="text-center py-12 text-gray-400">
+            <p>Aún no hay usuarios con experiencia registrada</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-gray-900">Ranking</h1>
-          <p className="text-gray-500 mt-1">Tabla de posiciones de tu curso</p>
+          <p className="text-gray-500 mt-1">Tabla de posiciones global (datos reales)</p>
         </motion.div>
 
-        {/* Mi posición */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-5 text-white"
-        >
-          <p className="text-blue-100 text-sm mb-2">Tu posición actual</p>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-lg font-bold">
-                #{miPosicion?.posicion}
+        {miPosicion && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-5 text-white"
+          >
+            <p className="text-blue-100 text-sm mb-2">Tu posición actual</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-lg font-bold">
+                  #{miPosicion.posicion}
+                </div>
+                <div>
+                  <p className="font-bold text-xl">{miPosicion.nombre}</p>
+                  <p className="text-blue-200 text-sm">{miPosicion.username}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-xl">{miPosicion?.nombre}</p>
-                <p className="text-blue-200 text-sm">{miPosicion?.username}</p>
+              <div className="text-right">
+                <p className="text-3xl font-bold">{miPosicion.xp}</p>
+                <p className="text-blue-200 text-sm">XP total</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold">{miPosicion?.xp}</p>
-              <p className="text-blue-200 text-sm">XP total</p>
-            </div>
+          </motion.div>
+        )}
+
+        {top5.length >= 3 && (
+          <div className="grid grid-cols-3 gap-4">
+            {[top5[1], top5[0], top5[2]].map((r, i) => r && (
+              <motion.div
+                key={r.posicion}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={`bg-white rounded-2xl p-4 shadow-sm border-2 text-center ${
+                  r.posicion === 1 ? "border-yellow-300 mt-0" : "border-gray-100 mt-4"
+                }`}
+              >
+                <div className="text-2xl mb-2">{getMedalEmoji(r.posicion)}</div>
+                <div className={`w-10 h-10 rounded-full mx-auto flex items-center justify-center text-white text-sm font-bold mb-2 ${
+                  r.posicion === 1 ? "bg-yellow-500" : r.posicion === 2 ? "bg-gray-400" : "bg-orange-400"
+                }`}>
+                  {r.avatar}
+                </div>
+                <p className="text-sm font-semibold text-gray-800 truncate">{r.nombre.split(" ")[0]}</p>
+                <p className="text-xs text-blue-600 font-medium mt-1">{r.xp} XP</p>
+              </motion.div>
+            ))}
           </div>
-        </motion.div>
+        )}
 
-        {/* Top 3 */}
-        <div className="grid grid-cols-3 gap-4">
-          {[rankingData[1], rankingData[0], rankingData[2]].map((r, i) => (
-            <motion.div
-              key={r.posicion}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className={`bg-white rounded-2xl p-4 shadow-sm border-2 text-center ${
-                r.posicion === 1 ? "border-yellow-300 mt-0" : "border-gray-100 mt-4"
-              }`}
-            >
-              <div className="text-2xl mb-2">{getMedalEmoji(r.posicion)}</div>
-              <div className={`w-10 h-10 rounded-full mx-auto flex items-center justify-center text-white text-sm font-bold mb-2 ${
-                r.posicion === 1 ? "bg-yellow-500" : r.posicion === 2 ? "bg-gray-400" : "bg-orange-400"
-              }`}>
-                {r.avatar}
-              </div>
-              <p className="text-sm font-semibold text-gray-800 truncate">{r.nombre.split(" ")[0]}</p>
-              <p className="text-xs text-blue-600 font-medium mt-1">{r.xp} XP</p>
-            </motion.div>
-          ))}
-        </div>
+        {chartData.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+          >
+            <h3 className="font-semibold text-gray-800 mb-4">Top 5 — XP acumulada</h3>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="xp" radius={[6, 6, 0, 0]}>
+                  {chartData.map((_, index) => (
+                    <Cell
+                      key={index}
+                      fill={index === 0 ? "#eab308" : index === 1 ? "#6b7280" : index === 2 ? "#f97316" : "#2563eb"}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </motion.div>
+        )}
 
-        {/* Gráfico */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
-        >
-          <h3 className="font-semibold text-gray-800 mb-4">Top 5 — XP acumulada</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="xp" radius={[6, 6, 0, 0]}>
-                {chartData.map((_, index) => (
-                  <Cell
-                    key={index}
-                    fill={index === 0 ? "#eab308" : index === 1 ? "#6b7280" : index === 2 ? "#f97316" : "#2563eb"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-
-        {/* Filtro período */}
-        <div className="flex gap-2">
-          {periodos.map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriodo(p)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                periodo === p
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-
-        {/* Tabla ranking completa */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -170,12 +188,12 @@ export default function RankingPage() {
             <h3 className="font-semibold text-gray-800">Clasificación completa</h3>
           </div>
           <div className="divide-y divide-gray-50">
-            {rankingData.map((r, i) => (
+            {ranking.map((r, i) => (
               <motion.div
-                key={r.posicion}
+                key={r.userId}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: i * 0.03 }}
                 className={`flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors ${
                   r.esYo ? "bg-blue-50 hover:bg-blue-50" : ""
                 }`}
@@ -196,12 +214,9 @@ export default function RankingPage() {
                     <p className="text-xs text-gray-400">{r.username} · Nivel {r.nivel}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {getTendenciaIcon(r.tendencia)}
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-800">{r.xp}</p>
-                    <p className="text-xs text-gray-400">XP</p>
-                  </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-gray-800">{r.xp}</p>
+                  <p className="text-xs text-gray-400">XP</p>
                 </div>
               </motion.div>
             ))}

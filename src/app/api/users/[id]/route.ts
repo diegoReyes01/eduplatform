@@ -119,7 +119,7 @@ export async function DELETE(
       );
     }
 
-    const userId = (payload as any).userId ?? payload.sub;
+    const userId = (payload as any).userId ?? (payload as any).sub;
     if (userId === id) {
       return NextResponse.json(
         errorResponse(ErrorCodes.BAD_REQUEST, "No puedes eliminar tu propia cuenta"),

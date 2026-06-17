@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userId = (payload as any).userId ?? payload.sub;
+    const userId = (payload as any).userId ?? (payload as any).sub;
     const body = await req.json().catch(() => null);
 
     if (!body?.title || !body?.subjectId || !body?.dueDate) {
