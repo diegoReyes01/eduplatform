@@ -35,7 +35,6 @@ enum ResourceType {
   PRESENTATION
   OTHER
 }
-
 enum AssignmentStatus {
   DRAFT
   PUBLISHED
@@ -196,7 +195,8 @@ model Subject {
   deletedBy   String?
 
   classes     Class[]
-  
+  resources   Resource[]
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -312,8 +312,11 @@ model Resource {
   
   uploadedById   String
   uploadedBy     User          @relation(fields: [uploadedById], references: [id])
-
+  subjectId      String?
+  subject        Subject?      @relation(fields: [subjectId], references: [id])
   createdAt    DateTime  @default(now())
+
+  
   updatedAt    DateTime  @updatedAt
 
   @@index([presentationId])
