@@ -2,15 +2,14 @@
 # EduPlatform - Dockerfile Multi-stage
 # =============================================================================
 
+ARG CACHE_BUST=1
+
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
+ARG CACHE_BUST
+RUN echo "Cache bust: $CACHE_BUST"
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
-COPY package.json package-lock.json ./
-COPY prisma ./prisma/
-COPY prisma.config.ts ./prisma.config.ts
-RUN npm ci --legacy-peer-deps
-RUN npx prisma generate
 
 # ── Stage 2: Builder ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
