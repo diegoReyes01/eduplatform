@@ -4,7 +4,7 @@
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
-ARG CACHEBUST=1
+ARG CACHEBUST=2
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -23,7 +23,7 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-
+RUN npx prisma generate
 RUN npm run build
 
 # ── Stage 3: Runner ───────────────────────────────────────────────────────────
