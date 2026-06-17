@@ -99,7 +99,6 @@ export async function POST(req: NextRequest) {
         fileSize: file.size,
         mimeType: file.type,
         uploadedById: userId,
-        ...(subjectId ? { subjectId } : {}),
       },
     });
 
