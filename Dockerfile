@@ -6,10 +6,9 @@
 FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
-
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
-
+COPY prisma.config.ts ./prisma.config.ts
 RUN npm ci --legacy-peer-deps
 RUN npx prisma generate
 
@@ -42,6 +41,7 @@ RUN adduser --system --uid 1001 nextjs
 # Copiar archivos necesarios
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/package.json ./package.json
 
 # Copiar build de Next.js
