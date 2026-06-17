@@ -27,9 +27,8 @@ export async function GET(req: NextRequest) {
 
     const resources = await prisma.resource.findMany({
       where: {
-        deletedAt: null,
-        ...(subjectId ? { subjectId } : {}),
-      },
+  deletedAt: null,
+},
       orderBy: { createdAt: "desc" },
       include: {
         uploadedBy: {
