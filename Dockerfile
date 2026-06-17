@@ -2,14 +2,15 @@
 # EduPlatform - Dockerfile Multi-stage
 # =============================================================================
 
-ARG CACHE_BUST=1
-
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
-ARG CACHE_BUST
-RUN echo "Cache bust: $CACHE_BUST"
+ARG CACHEBUST=1
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
+COPY package.json package-lock.json ./
+COPY prisma ./prisma/
+RUN npm ci --legacy-peer-deps
+RUN npx prisma generate
 
 # ── Stage 2: Builder ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
@@ -39,10 +40,7 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copiar archivos necesarios
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma/schema.prisma ./prisma/schema.prisma
-COPY --from=builder /app/prisma/migrations ./prisma/migrations
-COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
 # Copiar build de Next.js
