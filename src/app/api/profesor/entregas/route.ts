@@ -21,11 +21,12 @@ export async function GET(req: NextRequest) {
     if (!assignmentId) return NextResponse.json(errorResponse(ErrorCodes.VALIDATION_ERROR, "assignmentId requerido"), { status: 422 });
 
     const submissions = await prisma.submission.findMany({
-      where: { assignmentId },
-      include: {
+    where: { assignmentId },
+    include: {
         student: { select: { firstName: true, lastName: true, email: true } },
-      },
-      orderBy: { submittedAt: "desc" },
+        grade: true,
+    },
+    orderBy: { submittedAt: "desc" },
     });
 
     return NextResponse.json(successResponse(submissions));
