@@ -97,3 +97,25 @@ export async function DELETE(
     );
   }
 }
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const token = extractBearerToken(req.headers.get("Authorization"));
+    if (!token) return NextResponse.json(errorResponse(ErrorCodes.UNAUTHORIZED, "Token requerido"), { status: 401 });
+    try { verifyAccessToken(token); } catch {
+      return NextResponse.json(errorResponse(ErrorCodes.TOKEN_INVALID, "Token inválido"), { status: 401 });
+    }
+    const assignment = await prisma.assignment.findFirst({
+      where: { id, deletedAt: null },
+      include: { class: { select: { id: true, name: true } } },
+    });
+    if (!assignment) return NextResponse.json(errorResponse(ErrorCodes.NOT_FOUND, "Tarea no encontrada"), { status: 404 });
+    return NextResponse.json(successResponse(assignment));
+  } catch (err) {
+    console.error("[GET /api/assignments/[id]]", err);
+    return NextResponse.json(errorResponse(ErrorCodes.INTERNAL_ERROR, "Error"), { status: 500 });
+  }
+}
