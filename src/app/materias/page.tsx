@@ -324,7 +324,9 @@ export default function MateriasPage() {
               {!loadingRecursos && typeof selected.id === "string" && recursos.map((r, i) => (
                 <motion.a
                   key={r.id}
-                  href={r.url}
+                  href={
+                  r.type === "PDF" || r.type === "PRESENTATION"
+                  ? `https://docs.google.com/viewer?url=${encodeURIComponent(r.url)}&embedded=true`: r.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   initial={{ opacity: 0, scale: 0.95 }}
