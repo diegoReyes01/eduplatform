@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
         studentId: userId,
         assignmentId,
         content: content ?? "",
+        fileUrls: fileUrls ?? [],
         isLate,
         status: "SUBMITTED",
       },
