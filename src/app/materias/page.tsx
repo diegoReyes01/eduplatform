@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Search, BookOpen, Clock, Users, ChevronRight, Play, FileText, Star } from "lucide-react";
+import { useXP } from "@/hooks/useXP";
 
 interface MateriaAPI {
   id: string;
@@ -119,6 +120,7 @@ export default function MateriasPage() {
   const [loading, setLoading] = useState(true);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
   const [loadingRecursos, setLoadingRecursos] = useState(false);
+  const { ganarXP } = useXP();
 
   useEffect(() => {
     const cargar = async () => {
@@ -328,6 +330,7 @@ export default function MateriasPage() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: i * 0.05 }}
+                  onClick={() => ganarXP("LEER_PRESENTACION", `Accedió a recurso: ${r.title}`)}
                   className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
                 >
                   <span className="text-2xl">{iconMap[r.type] ?? "📁"}</span>
@@ -341,7 +344,6 @@ export default function MateriasPage() {
                 </motion.a>
               ))}
 
-              {/* Recursos demo para materias no reales */}
               {!loadingRecursos && typeof selected.id === "number" && [
                 { nombre: "Guía de estudio", tipo: "PDF", size: "2.4 MB", icon: "📄", url: "#" },
                 { nombre: "Presentación Unidad 1", tipo: "PPT", size: "5.1 MB", icon: "📊", url: "#" },
