@@ -58,19 +58,19 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
-              {tarea && <p className="text-gray-500 text-sm">{tarea.title} · Puntaje máximo: {tarea.maxScore}</p>}
+              {tarea && <p className="text-gray-500 text-sm">{tarea.title} x B7 Puntaje: {tarea.maxScore}</p>}
             </div>
           </div>
         </motion.div>
 
         <div className="grid grid-cols-3 gap-4">
           {[
-            { label: "Total entregas", value: submissions.length, color: "blue" },
+            { label: "Total", value: submissions.length, color: "blue" },
             { label: "A tiempo", value: submissions.filter(s => !s.isLate).length, color: "green" },
             { label: "Atrasadas", value: submissions.filter(s => s.isLate).length, color: "orange" },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
-              <p className={"text-2xl font-bold text-" + s.color + "-600"}>{s.value}</p>
+              <p className="text-2xl font-bold text-gray-800">{s.value}</p>
               <p className="text-xs text-gray-500 mt-1">{s.label}</p>
             </div>
           ))}
@@ -90,7 +90,7 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
           ) : submissions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400">
               <FileText size={40} className="mb-3 opacity-30" />
-              <p>Aún no hay entregas para esta tarea</p>
+              <p>Sin entregas aun</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
@@ -128,24 +128,16 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
                       </span>
                     </div>
                   </div>
-
                   {s.content && (
                     <div className="mt-3 ml-12 flex items-start gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
                       <MessageSquare size={14} className="mt-0.5 text-gray-400 shrink-0" />
                       <p>{s.content}</p>
                     </div>
                   )}
-
                   {s.fileUrls && s.fileUrls.length > 0 && (
                     <div className="mt-2 ml-12 flex flex-wrap gap-2">
                       {s.fileUrls.map((url, j) => (
-                        
-                          key={j}
-                          href={"https://docs.google.com/viewer?url=" + encodeURIComponent(url) + "&embedded=true"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-                        >
+                        <a key={j} href={"https://docs.google.com/viewer?url=" + encodeURIComponent(url) + "&embedded=true"} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
                           <FileText size={12} />
                           Ver archivo {j + 1}
                         </a>
