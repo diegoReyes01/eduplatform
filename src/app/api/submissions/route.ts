@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     catch { return NextResponse.json(errorResponse(ErrorCodes.TOKEN_INVALID, "Token inválido"), { status: 401 }); }
 
     const userId = (payload as any).userId ?? (payload as any).sub;
-    const { assignmentId, content } = await req.json();
+    const { assignmentId, content, fileUrls } = await req.json();
 
     if (!assignmentId) return NextResponse.json(errorResponse(ErrorCodes.VALIDATION_ERROR, "assignmentId requerido"), { status: 422 });
 
