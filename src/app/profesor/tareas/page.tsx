@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { ClipboardList, Calendar, AlertCircle, CheckCircle, Clock, Send, X, Paperclip } from "lucide-react";
-import { useXP } from "@/hooks/useXP";
+import Link from "next/link";
+import { Plus, Trash2, ChevronLeft, Calendar, BookOpen, Users, ChevronRight } from "lucide-react";
+
+interface Materia {
+  id: string;
+  name: string;
+}
 
 interface Tarea {
   id: string;
@@ -13,54 +18,30 @@ interface Tarea {
   dueDate: string;
   maxScore: number;
   status: string;
-  class: { id: string; name: string; subjectId: string };
+  class?: { name: string };
 }
 
-interface ModalEntrega {
-  tarea: Tarea;
-  content: string;
-  file: File | null;
-  subiendo: boolean;
-}
-
-function getDiasRestantes(fecha: string) {
-  const hoy = new Date();
-  const dueDate = new Date(fecha);
-  const diff = Math.ceil((dueDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-  return diff;
-}
-
-function getEstadoColor(dias: number) {
-  if (dias < 0) return { bg: "bg-gray-100", text: "text-gray-500", label: "Vencida" };
-  if (dias === 0) return { bg: "bg-red-100", text: "text-red-600", label: "Vence hoy" };
-  if (dias <= 2) return { bg: "bg-orange-100", text: "text-orange-600", label: `${dias} días` };
-  return { bg: "bg-green-100", text: "text-green-600", label: `${dias} días` };
-}
-
-export default function TareasEstudiantePage() {
+export default function ProfesorTareasPage() {
   const [tareas, setTareas] = useState<Tarea[]>([]);
+  const [materias, setMaterias] = useState<Materia[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState<"todas" | "pendientes" | "vencidas">("todas");
-  const [entregadas, setEntregadas] = useState<Set<string>>(new Set());
-  const [xpNotif, setXpNotif] = useState<string | null>(null);
-  const [modal, setModal] = useState<ModalEntrega | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const { ganarXP } = useXP();
+  const [form, setForm] = useState({ title: "", description: "", dueDate: "", maxScore: 100, subjectId: "" });
+  const [creando, setCreando] = useState(false);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const cargar = async () => {
       try {
         const token = localStorage.getItem("accessToken");
-        const [tareasRes, submissionsRes] = await Promise.all([
+        const [tareasRes, materiasRes] = await Promise.all([
           fetch("/api/assignments", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/submissions", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/subjects", { headers: { Authorization: `Bearer ${token}` } }),
         ]);
         const tareasData = await tareasRes.json();
-        const submissionsData = await submissionsRes.json();
-        if (tareasData.success) setTareas(tareasData.data.filter((t: Tarea) => t.status === "PUBLISHED"));
-        if (submissionsData.success) {
-          setEntregadas(new Set(submissionsData.data.map((s: { assignmentId: string }) => s.assignmentId)));
-        }
+        const materiasData = await materiasRes.json();
+        if (tareasData.success) setTareas(tareasData.data);
+        if (materiasData.success) setMaterias(materiasData.data);
       } catch {
         // silencioso
       } finally {
@@ -70,303 +51,209 @@ export default function TareasEstudiantePage() {
     cargar();
   }, []);
 
-  const abrirModal = (tarea: Tarea) => {
-    setModal({ tarea, content: "", file: null, subiendo: false });
-  };
-
-  const cerrarModal = () => {
-    if (modal?.subiendo) return;
-    setModal(null);
-  };
-
-  const handleEntregar = async () => {
-    if (!modal || modal.subiendo) return;
-    setModal(m => m ? { ...m, subiendo: true } : null);
-
+  const handleCrear = async () => {
+    if (!form.title || !form.dueDate || !form.subjectId) {
+      setError("Completa título, fecha límite y materia");
+      return;
+    }
+    setCreando(true);
+    setError("");
     try {
       const token = localStorage.getItem("accessToken");
-      let fileUrl: string | null = null;
-
-      // Subir archivo a Cloudinary si hay uno
-      if (modal.file) {
-        const formData = new FormData();
-        formData.append("file", modal.file);
-        formData.append("title", modal.file.name);
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadData.success) fileUrl = uploadData.data.url;
-      }
-
-      const res = await fetch("/api/submissions", {
+      const res = await fetch("/api/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          assignmentId: modal.tarea.id,
-          content: modal.content,
-          fileUrls: fileUrl ? [fileUrl] : [],
-        }),
+        body: JSON.stringify({ ...form, maxScore: Number(form.maxScore), status: "PUBLISHED" }),
       });
       const data = await res.json();
       if (data.success) {
-        await ganarXP("COMPLETAR_TAREA", `Entregó tarea: ${modal.tarea.title}`);
-        setEntregadas(prev => new Set(prev).add(modal.tarea.id));
-        setXpNotif(`+50 XP por entregar "${modal.tarea.title}"`);
-        setTimeout(() => setXpNotif(null), 3000);
-        setModal(null);
+        setTareas(prev => [data.data, ...prev]);
+        setForm({ title: "", description: "", dueDate: "", maxScore: 100, subjectId: "" });
+        setMostrarForm(false);
+      } else {
+        setError(data.error?.message ?? "Error al crear tarea");
       }
     } catch {
-      // silencioso
+      setError("Error de conexión");
     } finally {
-      setModal(m => m ? { ...m, subiendo: false } : null);
+      setCreando(false);
     }
   };
 
-  const filtered = tareas.filter(t => {
-    const dias = getDiasRestantes(t.dueDate);
-    if (filtro === "pendientes") return dias >= 0 && !entregadas.has(t.id);
-    if (filtro === "vencidas") return dias < 0;
-    return true;
-  });
+  const handleEliminar = async (id: string) => {
+    if (!confirm("¿Eliminar esta tarea?")) return;
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`/api/assignments/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) setTareas(prev => prev.filter(t => t.id !== id));
+    } catch {
+      // silencioso
+    }
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <AnimatePresence>
-          {xpNotif && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="fixed top-6 right-6 z-50 bg-green-500 text-white px-5 py-3 rounded-2xl shadow-lg font-medium flex items-center gap-2"
-            >
-              <CheckCircle size={18} />
-              {xpNotif}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Modal de entrega */}
-        <AnimatePresence>
-          {modal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-              onClick={cerrarModal}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                onClick={e => e.stopPropagation()}
-                className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-gray-900 text-lg">Entregar tarea</h2>
-                  <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600">
-                    <X size={20} />
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500 mb-4">{modal.tarea.title}</p>
-
-                {/* Texto */}
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Comentario (opcional)</label>
-                  <textarea
-                    value={modal.content}
-                    onChange={e => setModal(m => m ? { ...m, content: e.target.value } : null)}
-                    placeholder="Escribe un comentario para tu profesor..."
-                    rows={4}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
-                  />
-                </div>
-
-                {/* Archivo */}
-                <div className="mb-6">
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Archivo (opcional)</label>
-                  <div
-                    onClick={() => fileRef.current?.click()}
-                    className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
-                  >
-                    <Paperclip size={18} className="text-gray-400" />
-                    <span className="text-sm text-gray-500">
-                      {modal.file ? modal.file.name : "Clic para adjuntar PDF, imagen o video"}
-                    </span>
-                    {modal.file && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setModal(m => m ? { ...m, file: null } : null); }}
-                        className="ml-auto text-gray-400 hover:text-red-500"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".pdf,.ppt,.pptx,image/*,video/*"
-                    className="hidden"
-                    onChange={e => setModal(m => m ? { ...m, file: e.target.files?.[0] ?? null } : null)}
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={cerrarModal}
-                    disabled={modal.subiendo}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleEntregar}
-                    disabled={modal.subiendo}
-                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-                  >
-                    {modal.subiendo ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Send size={14} />
-                    )}
-                    {modal.subiendo ? "Enviando..." : "Entregar"}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-gray-900">Mis Tareas</h1>
-          <p className="text-gray-500 mt-1">Tareas publicadas por tus profesores</p>
+          <div className="flex items-center gap-3 mb-1">
+            <Link href="/profesor" className="text-gray-400 hover:text-gray-600">
+              <ChevronLeft size={20} />
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">Tareas</h1>
+          </div>
+          <p className="text-gray-500 ml-8">Gestiona las tareas de tus clases</p>
         </motion.div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Total", value: tareas.length, icon: ClipboardList, color: "blue" },
-            { label: "Pendientes", value: tareas.filter(t => getDiasRestantes(t.dueDate) >= 0 && !entregadas.has(t.id)).length, icon: Clock, color: "orange" },
-            { label: "Entregadas", value: entregadas.size, icon: CheckCircle, color: "green" },
-          ].map((s, i) => (
+        <button
+          onClick={() => setMostrarForm(v => !v)}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={16} />
+          Nueva tarea
+        </button>
+
+        <AnimatePresence>
+          {mostrarForm && (
             <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center"
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4"
             >
-              <div className={`w-9 h-9 bg-${s.color}-50 rounded-xl flex items-center justify-center mb-2 mx-auto`}>
-                <s.icon size={18} className={`text-${s.color}-600`} />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{s.value}</p>
-              <p className="text-xs text-gray-500">{s.label}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          {[
-            { id: "todas", label: "Todas" },
-            { id: "pendientes", label: "Pendientes" },
-            { id: "vencidas", label: "Vencidas" },
-          ].map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFiltro(f.id as typeof filtro)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                filtro === f.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-
-        {!loading && (
-          <div className="space-y-3">
-            {filtered.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <ClipboardList size={40} className="mx-auto mb-3 opacity-30" />
-                <p>No hay tareas en esta categoría</p>
-              </div>
-            ) : (
-              filtered.map((t, i) => {
-                const dias = getDiasRestantes(t.dueDate);
-                const estado = getEstadoColor(dias);
-                const yaEntregada = entregadas.has(t.id);
-
-                return (
-                  <motion.div
-                    key={t.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className={`bg-white rounded-2xl p-5 shadow-sm border transition-colors ${
-                      yaEntregada ? "border-green-200 bg-green-50/30" : "border-gray-100"
-                    }`}
+              <h3 className="font-semibold text-gray-800">Nueva tarea</h3>
+              {error && <p className="text-sm text-red-500">{error}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Título</label>
+                  <input
+                    value={form.title}
+                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
+                    placeholder="Ej: Tarea 1 - Álgebra"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Materia</label>
+                  <select
+                    value={form.subjectId}
+                    onChange={e => setForm(f => ({ ...f, subjectId: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-gray-800">{t.title}</h3>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estado.bg} ${estado.text}`}>
-                            {estado.label}
-                          </span>
-                          {yaEntregada && (
-                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-600 flex items-center gap-1">
-                              <CheckCircle size={10} /> Entregada
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-2">{t.description}</p>
-                        <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
-                          <span>{t.class?.name}</span>
-                          <span className="flex items-center gap-1">
-                            <Calendar size={12} />
-                            {new Date(t.dueDate).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}
-                          </span>
-                          <span>Puntaje máximo: {t.maxScore}</span>
-                        </div>
-                      </div>
+                    <option value="">Selecciona materia</option>
+                    {materias.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Fecha límite</label>
+                  <input
+                    type="datetime-local"
+                    value={form.dueDate}
+                    onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Puntaje máximo</label>
+                  <input
+                    type="number"
+                    value={form.maxScore}
+                    onChange={e => setForm(f => ({ ...f, maxScore: Number(e.target.value) }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-gray-500 mb-1 block">Descripción</label>
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
+                    placeholder="Instrucciones de la tarea..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMostrarForm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCrear}
+                  disabled={creando}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  {creando ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={14} />}
+                  {creando ? "Creando..." : "Crear tarea"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-                      {yaEntregada ? (
-                        <div className="flex items-center gap-1 text-green-600 text-sm font-medium px-4 py-2">
-                          <CheckCircle size={16} />
-                          Listo
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => abrirModal(t)}
-                          disabled={dias < 0}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
-                            dias < 0
-                              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                              : "bg-blue-600 text-white hover:bg-blue-700"
-                          }`}
-                        >
-                          <Send size={14} />
-                          {dias < 0 ? "Vencida" : "Entregar"}
-                        </button>
-                      )}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+        >
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
+              Cargando tareas...
+            </div>
+          ) : tareas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <BookOpen size={40} className="mb-3 opacity-30" />
+              <p>No hay tareas creadas</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {tareas.map((t, i) => (
+                <motion.div
+                  key={t.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-800">{t.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                      {t.class && <span className="flex items-center gap-1"><BookOpen size={10} />{t.class.name}</span>}
+                      <span className="flex items-center gap-1">
+                        <Calendar size={10} />
+                        {new Date(t.dueDate).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                      <span>Puntaje: {t.maxScore}</span>
                     </div>
-                  </motion.div>
-                );
-              })
-            )}
-          </div>
-        )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/profesor/tareas/entregas/${t.id}`}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Users size={12} />
+                      Ver entregas
+                      <ChevronRight size={12} />
+                    </Link>
+                    <button
+                      onClick={() => handleEliminar(t.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
       </div>
     </DashboardLayout>
   );

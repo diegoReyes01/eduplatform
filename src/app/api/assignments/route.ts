@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
         description: body.description?.trim() || "Sin descripción",
         maxScore: body.maxScore ?? 100,
         dueDate: new Date(body.dueDate),
-        status: "DRAFT",
+        status: body.status ?? "PUBLISHED",
         classId: classRecord.id,
         createdById: userId,
       },
