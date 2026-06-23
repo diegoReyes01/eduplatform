@@ -3,15 +3,26 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import {
-  MISIONES_DIARIAS,
-  MISIONES_SEMANALES,
-  MISIONES_ESPECIALES,
-  getProgresoMision,
-  type Mision,
-} from "@/lib/misiones";
-import { getTotalXP, getNivelInfo, XP_ACCIONES } from "@/lib/xp";
 import { Trophy, Flame, Star, Zap, CheckCircle, Lock } from "lucide-react";
+
+interface MisionDB {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  xpReward: number;
+  emoji: string;
+  target: number;
+  progreso: number;
+  status: string;
+  completada: boolean;
+}
+
+interface ExperienceDB {
+  totalXp: number;
+  currentXp: number;
+  level: { number: number; name: string; xpRequired: number; xpMax: number };
+}
 
 function BarraProgreso({ valor, max, color }: { valor: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((valor / max) * 100));
@@ -27,24 +38,15 @@ function BarraProgreso({ valor, max, color }: { valor: number; max: number; colo
   );
 }
 
-function TarjetaMision({ mision }: { mision: Mision }) {
-  const progreso = getProgresoMision(mision.id);
-  const pct = Math.min(100, Math.round((progreso.progreso / mision.meta) * 100));
-
-  const colorBorde = progreso.completada
-    ? "border-green-300 bg-green-50"
-    : mision.tipo === "diaria"
-    ? "border-blue-100 bg-white"
-    : mision.tipo === "semanal"
-    ? "border-purple-100 bg-white"
+function TarjetaMision({ mision }: { mision: MisionDB }) {
+  const pct = Math.min(100, Math.round((mision.progreso / mision.target) * 100));
+  const colorBorde = mision.completada ? "border-green-300 bg-green-50"
+    : mision.type === "DAILY" ? "border-blue-100 bg-white"
+    : mision.type === "WEEKLY" ? "border-purple-100 bg-white"
     : "border-yellow-200 bg-yellow-50";
-
-  const colorBarra = progreso.completada
-    ? "bg-green-500"
-    : mision.tipo === "diaria"
-    ? "bg-blue-500"
-    : mision.tipo === "semanal"
-    ? "bg-purple-500"
+  const colorBarra = mision.completada ? "bg-green-500"
+    : mision.type === "DAILY" ? "bg-blue-500"
+    : mision.type === "WEEKLY" ? "bg-purple-500"
     : "bg-yellow-500";
 
   return (
@@ -58,23 +60,22 @@ function TarjetaMision({ mision }: { mision: Mision }) {
         <div className="flex items-center gap-3">
           <span className="text-2xl">{mision.emoji}</span>
           <div>
-            <p className="font-semibold text-sm text-gray-800">{mision.titulo}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{mision.descripcion}</p>
+            <p className="font-semibold text-sm text-gray-800">{mision.title}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{mision.description}</p>
           </div>
         </div>
-        {progreso.completada ? (
+        {mision.completada ? (
           <CheckCircle size={20} className="text-green-500 shrink-0" />
         ) : (
           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full shrink-0">
-            +{mision.xpRecompensa} XP
+            +{mision.xpReward} XP
           </span>
         )}
       </div>
-
       <div className="space-y-1">
-        <BarraProgreso valor={progreso.progreso} max={mision.meta} color={colorBarra} />
+        <BarraProgreso valor={mision.progreso} max={mision.target} color={colorBarra} />
         <div className="flex justify-between text-xs text-gray-400">
-          <span>{progreso.progreso}/{mision.meta} completado</span>
+          <span>{mision.progreso}/{mision.target} completado</span>
           <span>{pct}%</span>
         </div>
       </div>
@@ -91,24 +92,56 @@ const INSIGNIAS = [
   { id: 6, nombre: "Maestro de Biología", emoji: "🧬", descripcion: "Explora todos los modelos de Biología", desbloqueada: true },
 ];
 
+const XP_INFO = [
+  { emoji: "🌅", label: "Login diario", xp: 10 },
+  { emoji: "🔬", label: "Modelo 3D", xp: 15 },
+  { emoji: "📖", label: "Leer recurso", xp: 20 },
+  { emoji: "📝", label: "Entregar tarea", xp: 50 },
+  { emoji: "📊", label: "Evaluación", xp: 75 },
+];
+
 export default function MisionesPage() {
   const [tab, setTab] = useState<"diarias" | "semanales" | "especiales" | "insignias">("diarias");
-  const [totalXp, setTotalXp] = useState(0);
-  const [subioNivel, setSubioNivel] = useState(false);
+  const [misiones, setMisiones] = useState<MisionDB[]>([]);
+  const [experience, setExperience] = useState<ExperienceDB | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setTotalXp(getTotalXP());
+    const cargar = async () => {
+      try {
+        const token = localStorage.getItem("accessToken");
+        const headers = { Authorization: `Bearer ${token}` };
+        const [expRes, misionesRes] = await Promise.all([
+          fetch("/api/experience", { headers }),
+          fetch("/api/misiones", { headers }),
+        ]);
+        const expData = await expRes.json();
+        const misionesData = await misionesRes.json();
+        if (expData.success) setExperience(expData.data);
+        if (misionesData.success) setMisiones(misionesData.data);
+      } catch {
+        // silencioso
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargar();
   }, []);
 
-  const nivelInfo = getNivelInfo(totalXp);
+  const diarias = misiones.filter(m => m.type === "DAILY");
+  const semanales = misiones.filter(m => m.type === "WEEKLY");
+  const especiales = misiones.filter(m => m.type === "SPECIAL");
 
-  const completadasDiarias = MISIONES_DIARIAS.filter(m => getProgresoMision(m.id).completada).length;
-  const completadasSemanales = MISIONES_SEMANALES.filter(m => getProgresoMision(m.id).completada).length;
+  const nivel = experience?.level;
+  const totalXp = experience?.totalXp ?? 0;
+  const currentXp = experience?.currentXp ?? 0;
+  const xpMax = nivel ? nivel.xpMax - nivel.xpRequired : 100;
+  const progresoPct = xpMax > 0 ? Math.round((currentXp / xpMax) * 100) : 0;
+  const xpRestante = xpMax - currentXp;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-gray-900">Misiones</h1>
           <p className="text-gray-500 mt-1">Completa misiones para ganar XP y subir de nivel</p>
@@ -120,48 +153,51 @@ export default function MisionesPage() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white"
         >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-indigo-200 text-sm">Nivel actual</p>
-              <p className="text-3xl font-bold">{nivelInfo.numero} — {nivelInfo.nombre}</p>
-              <p className="text-indigo-200 text-sm mt-1">{totalXp} XP total</p>
+          {loading ? (
+            <div className="flex justify-center py-4">
+              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
             </div>
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-              <span className="text-3xl">⚡</span>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-indigo-200">
-              <span>{nivelInfo.xpActual} XP</span>
-              <span>{nivelInfo.xpMax - nivelInfo.xpMin} XP</span>
-            </div>
-            <div className="w-full bg-white/20 rounded-full h-3">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${nivelInfo.progreso}%` }}
-                transition={{ duration: 1 }}
-                className="bg-yellow-300 h-3 rounded-full"
-              />
-            </div>
-            <p className="text-indigo-200 text-xs">{nivelInfo.xpRestante} XP para nivel {nivelInfo.numero + 1}</p>
-          </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-indigo-200 text-sm">Nivel actual</p>
+                  <p className="text-3xl font-bold">{nivel?.number ?? 1} — {nivel?.name ?? "Principiante"}</p>
+                  <p className="text-indigo-200 text-sm mt-1">{totalXp} XP total</p>
+                </div>
+                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                  <span className="text-3xl">⚡</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-indigo-200">
+                  <span>{currentXp} XP</span>
+                  <span>{xpMax} XP</span>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-3">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progresoPct}%` }}
+                    transition={{ duration: 1 }}
+                    className="bg-yellow-300 h-3 rounded-full"
+                  />
+                </div>
+                <p className="text-indigo-200 text-xs">{xpRestante} XP para nivel {(nivel?.number ?? 1) + 1}</p>
+              </div>
+            </>
+          )}
         </motion.div>
 
-        {/* Stats rápidas */}
+        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Misiones diarias", value: `${completadasDiarias}/${MISIONES_DIARIAS.length}`, icon: Flame, color: "text-orange-500", bg: "bg-orange-50" },
-            { label: "Misiones semanales", value: `${completadasSemanales}/${MISIONES_SEMANALES.length}`, icon: Trophy, color: "text-purple-500", bg: "bg-purple-50" },
+            { label: "Misiones diarias", value: `${diarias.filter(m => m.completada).length}/${diarias.length}`, icon: Flame, color: "text-orange-500", bg: "bg-orange-50" },
+            { label: "Misiones semanales", value: `${semanales.filter(m => m.completada).length}/${semanales.length}`, icon: Trophy, color: "text-purple-500", bg: "bg-purple-50" },
             { label: "Insignias", value: `${INSIGNIAS.filter(i => i.desbloqueada).length}/${INSIGNIAS.length}`, icon: Star, color: "text-yellow-500", bg: "bg-yellow-50" },
-            { label: "XP ganada hoy", value: "85", icon: Zap, color: "text-blue-500", bg: "bg-blue-50" },
+            { label: "XP total", value: totalXp.toString(), icon: Zap, color: "text-blue-500", bg: "bg-blue-50" },
           ].map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
-            >
+            <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
               <div className={`w-9 h-9 ${s.bg} rounded-xl flex items-center justify-center mb-2`}>
                 <s.icon size={18} className={s.color} />
               </div>
@@ -179,103 +215,78 @@ export default function MisionesPage() {
             { id: "especiales", label: "⭐ Especiales" },
             { id: "insignias", label: "🏅 Insignias" },
           ].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id as typeof tab)}
+            <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                tab === t.id
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-              }`}
-            >
+                tab === t.id ? "bg-indigo-600 text-white shadow-md" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+              }`}>
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* Contenido tabs */}
-        <AnimatePresence mode="wait">
-          {tab === "diarias" && (
-            <motion.div
-              key="diarias"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-              {MISIONES_DIARIAS.map(m => <TarjetaMision key={m.id} mision={m} />)}
-            </motion.div>
-          )}
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
 
-          {tab === "semanales" && (
-            <motion.div
-              key="semanales"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-              {MISIONES_SEMANALES.map(m => <TarjetaMision key={m.id} mision={m} />)}
-            </motion.div>
-          )}
+        {!loading && (
+          <AnimatePresence mode="wait">
+            {tab === "diarias" && (
+              <motion.div key="diarias" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {diarias.length === 0
+                  ? <p className="text-gray-400 text-sm col-span-3 text-center py-8">No hay misiones diarias disponibles</p>
+                  : diarias.map(m => <TarjetaMision key={m.id} mision={m} />)}
+              </motion.div>
+            )}
+            {tab === "semanales" && (
+              <motion.div key="semanales" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {semanales.length === 0
+                  ? <p className="text-gray-400 text-sm col-span-3 text-center py-8">No hay misiones semanales disponibles</p>
+                  : semanales.map(m => <TarjetaMision key={m.id} mision={m} />)}
+              </motion.div>
+            )}
+            {tab === "especiales" && (
+              <motion.div key="especiales" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {especiales.length === 0
+                  ? <p className="text-gray-400 text-sm col-span-3 text-center py-8">No hay misiones especiales disponibles</p>
+                  : especiales.map(m => <TarjetaMision key={m.id} mision={m} />)}
+              </motion.div>
+            )}
+            {tab === "insignias" && (
+              <motion.div key="insignias" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                {INSIGNIAS.map((ins, i) => (
+                  <motion.div key={ins.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.05 }} whileHover={{ scale: 1.05 }}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center ${
+                      ins.desbloqueada ? "border-yellow-300 bg-yellow-50" : "border-gray-100 bg-gray-50 opacity-50"
+                    }`}>
+                    <span className="text-3xl">{ins.emoji}</span>
+                    <p className="text-xs font-semibold text-gray-800">{ins.nombre}</p>
+                    <p className="text-xs text-gray-400">{ins.descripcion}</p>
+                    {!ins.desbloqueada && <Lock size={12} className="text-gray-400" />}
+                    {ins.desbloqueada && <CheckCircle size={14} className="text-green-500" />}
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
 
-          {tab === "especiales" && (
-            <motion.div
-              key="especiales"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-              {MISIONES_ESPECIALES.map(m => <TarjetaMision key={m.id} mision={m} />)}
-            </motion.div>
-          )}
-
-          {tab === "insignias" && (
-            <motion.div
-              key="insignias"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4"
-            >
-              {INSIGNIAS.map((ins, i) => (
-                <motion.div
-                  key={ins.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.05 }}
-                  whileHover={{ scale: 1.05 }}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center ${
-                    ins.desbloqueada
-                      ? "border-yellow-300 bg-yellow-50"
-                      : "border-gray-100 bg-gray-50 opacity-50"
-                  }`}
-                >
-                  <span className="text-3xl">{ins.emoji}</span>
-                  <p className="text-xs font-semibold text-gray-800">{ins.nombre}</p>
-                  <p className="text-xs text-gray-400">{ins.descripcion}</p>
-                  {!ins.desbloqueada && <Lock size={12} className="text-gray-400" />}
-                  {ins.desbloqueada && <CheckCircle size={14} className="text-green-500" />}
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Acciones XP info */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
-        >
+        {/* XP info */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <h3 className="font-semibold text-gray-800 mb-4">¿Cómo ganar XP?</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {Object.entries(XP_ACCIONES).map(([key, val]) => (
-              <div key={key} className="flex flex-col items-center gap-1 p-3 bg-gray-50 rounded-xl text-center">
-                <span className="text-2xl">{val.emoji}</span>
-                <p className="text-xs text-gray-600 font-medium">{val.label}</p>
-                <span className="text-sm font-bold text-indigo-600">+{val.xp} XP</span>
+            {XP_INFO.map((item, i) => (
+              <div key={i} className="flex flex-col items-center gap-1 p-3 bg-gray-50 rounded-xl text-center">
+                <span className="text-2xl">{item.emoji}</span>
+                <p className="text-xs text-gray-600 font-medium">{item.label}</p>
+                <span className="text-sm font-bold text-indigo-600">+{item.xp} XP</span>
               </div>
             ))}
           </div>
