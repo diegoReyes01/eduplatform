@@ -1,47 +1,44 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { use } from "react";
+import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Link from "next/link";
-import { Plus, Trash2, ChevronLeft, Calendar, BookOpen, Users, ChevronRight } from "lucide-react";
+import { ChevronLeft, FileText, MessageSquare, Clock, CheckCircle, AlertCircle } from "lucide-react";
 
-interface Materia {
+interface Submission {
   id: string;
-  name: string;
-}
-
-interface Tarea {
-  id: string;
-  title: string;
-  description: string;
-  dueDate: string;
-  maxScore: number;
+  content: string;
+  fileUrls: string[];
+  isLate: boolean;
   status: string;
-  class?: { name: string };
+  submittedAt: string;
+  student: { firstName: string; lastName: string; email: string };
 }
 
-export default function ProfesorTareasPage() {
-  const [tareas, setTareas] = useState<Tarea[]>([]);
-  const [materias, setMaterias] = useState<Materia[]>([]);
+export default function EntregasPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ title: "", description: "", dueDate: "", maxScore: 100, classId: "" });
-  const [creando, setCreando] = useState(false);
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [error, setError] = useState("");
+  const [tarea, setTarea] = useState<{ title: string; maxScore: number } | null>(null);
 
   useEffect(() => {
     const cargar = async () => {
       try {
         const token = localStorage.getItem("accessToken");
-        const [tareasRes, materiasRes] = await Promise.all([
-          fetch("/api/assignments", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/subjects", { headers: { Authorization: `Bearer ${token}` } }),
+        const [subRes, tareaRes] = await Promise.all([
+          fetch(`/api/profesor/entregas?assignmentId=${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`/api/assignments/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
         ]);
-        const tareasData = await tareasRes.json();
-        const materiasData = await materiasRes.json();
-        if (tareasData.success) setTareas(tareasData.data);
-        if (materiasData.success) setMaterias(materiasData.data);
+        const subData = await subRes.json();
+        const tareaData = await tareaRes.json();
+        if (subData.success) setSubmissions(subData.data);
+        if (tareaData.success) setTarea(tareaData.data);
       } catch {
         // silencioso
       } finally {
@@ -49,156 +46,36 @@ export default function ProfesorTareasPage() {
       }
     };
     cargar();
-  }, []);
-
-  const handleCrear = async () => {
-    if (!form.title || !form.dueDate || !form.classId) {
-      setError("Completa título, fecha límite y materia");
-      return;
-    }
-    setCreando(true);
-    setError("");
-    try {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch("/api/assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...form, maxScore: Number(form.maxScore), status: "PUBLISHED" }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTareas(prev => [data.data, ...prev]);
-        setForm({ title: "", description: "", dueDate: "", maxScore: 100, classId: "" });
-        setMostrarForm(false);
-      } else {
-        setError(data.error?.message ?? "Error al crear tarea");
-      }
-    } catch {
-      setError("Error de conexión");
-    } finally {
-      setCreando(false);
-    }
-  };
-
-  const handleEliminar = async (id: string) => {
-    if (!confirm("¿Eliminar esta tarea?")) return;
-    try {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(`/api/assignments/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.success) setTareas(prev => prev.filter(t => t.id !== id));
-    } catch {
-      // silencioso
-    }
-  };
+  }, [id]);
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3 mb-1">
-            <Link href="/profesor" className="text-gray-400 hover:text-gray-600">
+            <Link href="/profesor/tareas" className="text-gray-400 hover:text-gray-600">
               <ChevronLeft size={20} />
             </Link>
-            <h1 className="text-2xl font-bold text-gray-900">Tareas</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
+              {tarea && <p className="text-gray-500 text-sm">{tarea.title} · Puntaje máximo: {tarea.maxScore}</p>}
+            </div>
           </div>
-          <p className="text-gray-500 ml-8">Gestiona las tareas de tus clases</p>
         </motion.div>
 
-        {/* Botón nueva tarea */}
-        <button
-          onClick={() => setMostrarForm(v => !v)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          Nueva tarea
-        </button>
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "Total entregas", value: submissions.length, color: "blue" },
+            { label: "A tiempo", value: submissions.filter(s => !s.isLate).length, color: "green" },
+            { label: "Atrasadas", value: submissions.filter(s => s.isLate).length, color: "orange" },
+          ].map((s, i) => (
+            <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+              <p className={`text-2xl font-bold text-${s.color}-600`}>{s.value}</p>
+              <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
 
-        {/* Formulario */}
-        <AnimatePresence>
-          {mostrarForm && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4"
-            >
-              <h3 className="font-semibold text-gray-800">Nueva tarea</h3>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Título</label>
-                  <input
-                    value={form.title}
-                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
-                    placeholder="Ej: Tarea 1 - Álgebra"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Materia</label>
-                  <select
-                    value={form.classId}
-                    onChange={e => setForm(f => ({ ...f, classId: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  >
-                    <option value="">Selecciona materia</option>
-                    {materias.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Fecha límite</label>
-                  <input
-                    type="datetime-local"
-                    value={form.dueDate}
-                    onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Puntaje máximo</label>
-                  <input
-                    type="number"
-                    value={form.maxScore}
-                    onChange={e => setForm(f => ({ ...f, maxScore: Number(e.target.value) }))}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs text-gray-500 mb-1 block">Descripción</label>
-                  <textarea
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    rows={3}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
-                    placeholder="Instrucciones de la tarea..."
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setMostrarForm(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCrear}
-                  disabled={creando}
-                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-                >
-                  {creando ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={14} />}
-                  {creando ? "Creando..." : "Crear tarea"}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Lista tareas */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -208,50 +85,73 @@ export default function ProfesorTareasPage() {
           {loading ? (
             <div className="flex items-center justify-center py-16 text-gray-400">
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
-              Cargando tareas...
+              Cargando entregas...
             </div>
-          ) : tareas.length === 0 ? (
+          ) : submissions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-              <BookOpen size={40} className="mb-3 opacity-30" />
-              <p>No hay tareas creadas</p>
+              <FileText size={40} className="mb-3 opacity-30" />
+              <p>Aún no hay entregas para esta tarea</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {tareas.map((t, i) => (
+              {submissions.map((s, i) => (
                 <motion.div
-                  key={t.id}
+                  key={s.id}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                  className="p-5"
                 >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">{t.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                      {t.class && <span className="flex items-center gap-1"><BookOpen size={10} />{t.class.name}</span>}
-                      <span className="flex items-center gap-1">
-                        <Calendar size={10} />
-                        {new Date(t.dueDate).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">
+                        {s.student.firstName[0]}{s.student.lastName[0]}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{s.student.firstName} {s.student.lastName}</p>
+                        <p className="text-xs text-gray-400">{s.student.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {s.isLate ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 flex items-center gap-1">
+                          <AlertCircle size={10} /> Atrasada
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-600 flex items-center gap-1">
+                          <CheckCircle size={10} /> A tiempo
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <Clock size={10} />
+                        {new Date(s.submittedAt).toLocaleDateString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      <span>Puntaje: {t.maxScore}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/profesor/tareas/entregas/${t.id}`}
-                      className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <Users size={12} />
-                      Ver entregas
-                      <ChevronRight size={12} />
-                    </Link>
-                    <button
-                      onClick={() => handleEliminar(t.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+
+                  {s.content && (
+                    <div className="mt-3 ml-12 flex items-start gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl p-3">
+                      <MessageSquare size={14} className="mt-0.5 text-gray-400 shrink-0" />
+                      <p>{s.content}</p>
+                    </div>
+                  )}
+
+                  {s.fileUrls?.length > 0 && (
+                    <div className="mt-2 ml-12 flex flex-wrap gap-2">
+                      {s.fileUrls.map((url, j) => (
+                        
+                          key={j}
+                          href={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <FileText size={12} />
+                          Ver archivo {j + 1}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>
