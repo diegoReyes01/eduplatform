@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback } from "react";
 
 export type AccionXP =
@@ -9,17 +8,8 @@ export type AccionXP =
   | "APROBAR_EVALUACION"
   | "MISION_ESPECIAL"
   | "LOGIN_DIARIO"
-  | "COMPLETAR_MISION";
-
-const XP_VALORES: Record<AccionXP, number> = {
-  LEER_PRESENTACION: 10,
-  COMPLETAR_TAREA: 50,
-  VER_MODELO_3D: 20,
-  APROBAR_EVALUACION: 100,
-  MISION_ESPECIAL: 200,
-  LOGIN_DIARIO: 15,
-  COMPLETAR_MISION: 75,
-};
+  | "COMPLETAR_MISION"
+  | "COMPLETAR_EVALUACION";
 
 export function useXP() {
   const ganarXP = useCallback(async (accion: AccionXP, descripcion?: string) => {
@@ -33,17 +23,12 @@ export function useXP() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          amount: XP_VALORES[accion],
-          reason: descripcion ?? accion,
-          source: accion,
-        }),
+        body: JSON.stringify({ accion, descripcion }),
       });
 
       const data = await res.json();
       if (data.success) {
-        const exp = data.data;
-        // Guardar en localStorage para uso rápido en UI
+        const exp = data.data.experience;
         const user = localStorage.getItem("user");
         if (user) {
           const u = JSON.parse(user);
@@ -67,5 +52,5 @@ export function useXP() {
     await ganarXP("LOGIN_DIARIO", "Login diario");
   }, [ganarXP]);
 
-  return { ganarXP, verificarLoginDiario, XP_VALORES };
+  return { ganarXP, verificarLoginDiario };
 }
