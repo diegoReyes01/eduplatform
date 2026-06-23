@@ -28,11 +28,11 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
       try {
         const token = localStorage.getItem("accessToken");
         const [subRes, tareaRes] = await Promise.all([
-          fetch(`/api/profesor/entregas?assignmentId=${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
+          fetch("/api/profesor/entregas?assignmentId=" + id, {
+            headers: { Authorization: "Bearer " + token },
           }),
-          fetch(`/api/assignments/${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
+          fetch("/api/assignments/" + id, {
+            headers: { Authorization: "Bearer " + token },
           }),
         ]);
         const subData = await subRes.json();
@@ -70,7 +70,7 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
             { label: "Atrasadas", value: submissions.filter(s => s.isLate).length, color: "orange" },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
-              <p className={`text-2xl font-bold text-${s.color}-600`}>{s.value}</p>
+              <p className={"text-2xl font-bold text-" + s.color + "-600"}>{s.value}</p>
               <p className="text-xs text-gray-500 mt-1">{s.label}</p>
             </div>
           ))}
@@ -136,12 +136,12 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
                     </div>
                   )}
 
-                  {s.fileUrls?.length > 0 && (
+                  {s.fileUrls && s.fileUrls.length > 0 && (
                     <div className="mt-2 ml-12 flex flex-wrap gap-2">
                       {s.fileUrls.map((url, j) => (
                         
                           key={j}
-                          href={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+                          href={"https://docs.google.com/viewer?url=" + encodeURIComponent(url) + "&embedded=true"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
