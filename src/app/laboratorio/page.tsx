@@ -4,9 +4,9 @@ import { Suspense, lazy, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { use3DScene } from "@/hooks/use3DScene";
+import { useXP } from "@/hooks/useXP";
 import { FlaskConical, Dna, Atom } from "lucide-react";
 
-// Lazy Loading de componentes 3D
 const Atomo = lazy(() => import("@/components/3d/quimica/Atomo"));
 const Molecula = lazy(() => import("@/components/3d/quimica/Molecula"));
 const ADN = lazy(() => import("@/components/3d/biologia/ADN"));
@@ -14,7 +14,6 @@ const Celula = lazy(() => import("@/components/3d/biologia/Celula"));
 const SistemaSolar = lazy(() => import("@/components/3d/fisica/SistemaSolar"));
 const MovimientoParabolico = lazy(() => import("@/components/3d/fisica/MovimientoParabolico"));
 
-// Loading spinner
 function Loader3D() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -45,10 +44,7 @@ const modelos = {
   ],
 };
 
-function renderModelo(
-  id: string,
-  onHover: (info: any) => void
-) {
+function renderModelo(id: string, onHover: (info: any) => void) {
   switch (id) {
     case "atomo": return <Atomo onHover={onHover} />;
     case "molecula": return <Molecula onHover={onHover} />;
@@ -64,10 +60,17 @@ export default function LaboratorioPage() {
   const [categoria, setCategoria] = useState("quimica");
   const [modeloActivo, setModeloActivo] = useState("atomo");
   const { info, showInfo, hideInfo } = use3DScene();
+  const { ganarXP } = useXP();
 
   const handleHover = (data: any) => {
     if (data) showInfo(data);
     else hideInfo();
+  };
+
+  const handleSeleccionarModelo = (id: string, label: string) => {
+    setModeloActivo(id);
+    hideInfo();
+    ganarXP("VER_MODELO_3D", `Exploró modelo 3D: ${label}`);
   };
 
   const catActual = categorias.find(c => c.id === categoria)!;
@@ -76,13 +79,11 @@ export default function LaboratorioPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-gray-900">Laboratorio 3D</h1>
           <p className="text-gray-500 mt-1">Explora modelos interactivos — rota, zoom y haz clic</p>
         </motion.div>
 
-        {/* Tabs categorías */}
         <div className="flex gap-2 flex-wrap">
           {categorias.map(cat => (
             <motion.button
@@ -91,8 +92,8 @@ export default function LaboratorioPage() {
               whileTap={{ scale: 0.97 }}
               onClick={() => {
                 setCategoria(cat.id);
-                setModeloActivo(modelos[cat.id as keyof typeof modelos][0].id);
-                hideInfo();
+                const primerModelo = modelos[cat.id as keyof typeof modelos][0];
+                handleSeleccionarModelo(primerModelo.id, primerModelo.label);
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 categoria === cat.id
@@ -106,15 +107,13 @@ export default function LaboratorioPage() {
           ))}
         </div>
 
-        {/* Layout principal */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Sidebar modelos */}
           <div className="lg:col-span-1 flex flex-col gap-2">
             {modelosActuales.map(m => (
               <motion.button
                 key={m.id}
                 whileHover={{ x: 4 }}
-                onClick={() => { setModeloActivo(m.id); hideInfo(); }}
+                onClick={() => handleSeleccionarModelo(m.id, m.label)}
                 className={`text-left p-4 rounded-xl border transition-all ${
                   modeloActivo === m.id
                     ? "border-blue-500 bg-blue-50 shadow-sm"
@@ -128,7 +127,6 @@ export default function LaboratorioPage() {
               </motion.button>
             ))}
 
-            {/* Panel informativo */}
             <AnimatePresence>
               {info && (
                 <motion.div
@@ -160,7 +158,6 @@ export default function LaboratorioPage() {
             )}
           </div>
 
-          {/* Canvas 3D */}
           <motion.div
             key={modeloActivo}
             initial={{ opacity: 0, scale: 0.97 }}
@@ -175,7 +172,6 @@ export default function LaboratorioPage() {
           </motion.div>
         </div>
 
-        {/* Tips */}
         <div className="flex gap-3 flex-wrap">
           {[
             { emoji: "🖱️", texto: "Clic + arrastrar para rotar" },

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { ClipboardList, Calendar, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { ClipboardList, Calendar, AlertCircle, CheckCircle, Clock, Send } from "lucide-react";
+import { useXP } from "@/hooks/useXP";
 
 interface Tarea {
   id: string;
@@ -33,6 +34,10 @@ export default function TareasEstudiantePage() {
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<"todas" | "pendientes" | "vencidas">("todas");
+  const [entregadas, setEntregadas] = useState<Set<string>>(new Set());
+  const [entregando, setEntregando] = useState<string | null>(null);
+  const [xpNotif, setXpNotif] = useState<string | null>(null);
+  const { ganarXP } = useXP();
 
   useEffect(() => {
     const cargar = async () => {
@@ -43,7 +48,6 @@ export default function TareasEstudiantePage() {
         });
         const data = await res.json();
         if (data.success) {
-          // Solo mostrar tareas publicadas
           setTareas(data.data.filter((t: Tarea) => t.status === "PUBLISHED"));
         }
       } catch {
@@ -53,7 +57,31 @@ export default function TareasEstudiantePage() {
       }
     };
     cargar();
+
+    // Cargar entregas guardadas localmente
+    const saved = localStorage.getItem("tareasEntregadas");
+    if (saved) setEntregadas(new Set(JSON.parse(saved)));
   }, []);
+
+  const handleEntregar = async (tarea: Tarea) => {
+    if (entregadas.has(tarea.id) || entregando === tarea.id) return;
+
+    setEntregando(tarea.id);
+    try {
+      await ganarXP("COMPLETAR_TAREA", `Entregó tarea: ${tarea.title}`);
+
+      const nuevas = new Set(entregadas).add(tarea.id);
+      setEntregadas(nuevas);
+      localStorage.setItem("tareasEntregadas", JSON.stringify([...nuevas]));
+
+      setXpNotif(`+XP por entregar "${tarea.title}"`);
+      setTimeout(() => setXpNotif(null), 3000);
+    } catch {
+      // silencioso
+    } finally {
+      setEntregando(null);
+    }
+  };
 
   const filtered = tareas.filter(t => {
     const dias = getDiasRestantes(t.dueDate);
@@ -65,6 +93,21 @@ export default function TareasEstudiantePage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Notificación XP */}
+        <AnimatePresence>
+          {xpNotif && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed top-6 right-6 z-50 bg-green-500 text-white px-5 py-3 rounded-2xl shadow-lg font-medium flex items-center gap-2"
+            >
+              <CheckCircle size={18} />
+              {xpNotif}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-gray-900">Mis Tareas</h1>
           <p className="text-gray-500 mt-1">Tareas publicadas por tus profesores</p>
@@ -131,13 +174,18 @@ export default function TareasEstudiantePage() {
               filtered.map((t, i) => {
                 const dias = getDiasRestantes(t.dueDate);
                 const estado = getEstadoColor(dias);
+                const yaEntregada = entregadas.has(t.id);
+                const cargando = entregando === t.id;
+
                 return (
                   <motion.div
                     key={t.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+                    className={`bg-white rounded-2xl p-5 shadow-sm border transition-colors ${
+                      yaEntregada ? "border-green-200 bg-green-50/30" : "border-gray-100"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
@@ -146,6 +194,11 @@ export default function TareasEstudiantePage() {
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estado.bg} ${estado.text}`}>
                             {estado.label}
                           </span>
+                          {yaEntregada && (
+                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-600 flex items-center gap-1">
+                              <CheckCircle size={10} /> Entregada
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-500 mt-2">{t.description}</p>
                         <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
@@ -157,9 +210,32 @@ export default function TareasEstudiantePage() {
                           <span>Puntaje máximo: {t.maxScore}</span>
                         </div>
                       </div>
-                      <button className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors whitespace-nowrap">
-                        Entregar
-                      </button>
+
+                      {yaEntregada ? (
+                        <div className="flex items-center gap-1 text-green-600 text-sm font-medium px-4 py-2">
+                          <CheckCircle size={16} />
+                          Listo
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleEntregar(t)}
+                          disabled={cargando || dias < 0}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
+                            dias < 0
+                              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              : cargando
+                              ? "bg-blue-400 text-white cursor-wait"
+                              : "bg-blue-600 text-white hover:bg-blue-700"
+                          }`}
+                        >
+                          {cargando ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Send size={14} />
+                          )}
+                          {cargando ? "Enviando..." : dias < 0 ? "Vencida" : "Entregar"}
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 );

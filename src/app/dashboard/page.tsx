@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useXP } from "@/hooks/useXP";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import {
@@ -56,6 +57,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
+    const { verificarLoginDiario } = useXP();
+    verificarLoginDiario();
     if (stored) setUser(JSON.parse(stored));
 
     const cargarExperiencia = async () => {
