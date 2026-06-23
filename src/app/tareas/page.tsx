@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { ClipboardList, Calendar, AlertCircle, CheckCircle, Clock, Send } from "lucide-react";
+import { ClipboardList, Calendar, AlertCircle, CheckCircle, Clock, Send, X, Paperclip } from "lucide-react";
 import { useXP } from "@/hooks/useXP";
 
 interface Tarea {
@@ -14,6 +14,13 @@ interface Tarea {
   maxScore: number;
   status: string;
   class: { id: string; name: string; subjectId: string };
+}
+
+interface ModalEntrega {
+  tarea: Tarea;
+  content: string;
+  file: File | null;
+  subiendo: boolean;
 }
 
 function getDiasRestantes(fecha: string) {
@@ -35,20 +42,24 @@ export default function TareasEstudiantePage() {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<"todas" | "pendientes" | "vencidas">("todas");
   const [entregadas, setEntregadas] = useState<Set<string>>(new Set());
-  const [entregando, setEntregando] = useState<string | null>(null);
   const [xpNotif, setXpNotif] = useState<string | null>(null);
+  const [modal, setModal] = useState<ModalEntrega | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const { ganarXP } = useXP();
 
   useEffect(() => {
     const cargar = async () => {
       try {
         const token = localStorage.getItem("accessToken");
-        const res = await fetch("/api/assignments", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.success) {
-          setTareas(data.data.filter((t: Tarea) => t.status === "PUBLISHED"));
+        const [tareasRes, submissionsRes] = await Promise.all([
+          fetch("/api/assignments", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/submissions", { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        const tareasData = await tareasRes.json();
+        const submissionsData = await submissionsRes.json();
+        if (tareasData.success) setTareas(tareasData.data.filter((t: Tarea) => t.status === "PUBLISHED"));
+        if (submissionsData.success) {
+          setEntregadas(new Set(submissionsData.data.map((s: { assignmentId: string }) => s.assignmentId)));
         }
       } catch {
         // silencioso
@@ -57,35 +68,62 @@ export default function TareasEstudiantePage() {
       }
     };
     cargar();
-
-    // Cargar entregas guardadas localmente
-    const saved = localStorage.getItem("tareasEntregadas");
-    if (saved) setEntregadas(new Set(JSON.parse(saved)));
   }, []);
 
-  const handleEntregar = async (tarea: Tarea) => {
-    if (entregadas.has(tarea.id) || entregando === tarea.id) return;
+  const abrirModal = (tarea: Tarea) => {
+    setModal({ tarea, content: "", file: null, subiendo: false });
+  };
 
-    setEntregando(tarea.id);
+  const cerrarModal = () => {
+    if (modal?.subiendo) return;
+    setModal(null);
+  };
+
+  const handleEntregar = async () => {
+    if (!modal || modal.subiendo) return;
+    setModal(m => m ? { ...m, subiendo: true } : null);
     try {
-      await ganarXP("COMPLETAR_TAREA", `Entregó tarea: ${tarea.title}`);
-
-      const nuevas = new Set(entregadas).add(tarea.id);
-      setEntregadas(nuevas);
-      localStorage.setItem("tareasEntregadas", JSON.stringify([...nuevas]));
-
-      setXpNotif(`+XP por entregar "${tarea.title}"`);
-      setTimeout(() => setXpNotif(null), 3000);
+      const token = localStorage.getItem("accessToken");
+      let fileUrl: string | null = null;
+      if (modal.file) {
+        const formData = new FormData();
+        formData.append("file", modal.file);
+        formData.append("title", modal.file.name);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success) fileUrl = uploadData.data.url;
+      }
+      const res = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          assignmentId: modal.tarea.id,
+          content: modal.content,
+          fileUrls: fileUrl ? [fileUrl] : [],
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await ganarXP("COMPLETAR_TAREA", `Entregó tarea: ${modal.tarea.title}`);
+        setEntregadas(prev => new Set(prev).add(modal.tarea.id));
+        setXpNotif(`+50 XP por entregar "${modal.tarea.title}"`);
+        setTimeout(() => setXpNotif(null), 3000);
+        setModal(null);
+      }
     } catch {
       // silencioso
     } finally {
-      setEntregando(null);
+      setModal(m => m ? { ...m, subiendo: false } : null);
     }
   };
 
   const filtered = tareas.filter(t => {
     const dias = getDiasRestantes(t.dueDate);
-    if (filtro === "pendientes") return dias >= 0;
+    if (filtro === "pendientes") return dias >= 0 && !entregadas.has(t.id);
     if (filtro === "vencidas") return dias < 0;
     return true;
   });
@@ -93,7 +131,6 @@ export default function TareasEstudiantePage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Notificación XP */}
         <AnimatePresence>
           {xpNotif && (
             <motion.div
@@ -108,17 +145,102 @@ export default function TareasEstudiantePage() {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {modal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+              onClick={cerrarModal}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-gray-900 text-lg">Entregar tarea</h2>
+                  <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-600">
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-500 mb-4">{modal.tarea.title}</p>
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Comentario (opcional)</label>
+                  <textarea
+                    value={modal.content}
+                    onChange={e => setModal(m => m ? { ...m, content: e.target.value } : null)}
+                    placeholder="Escribe un comentario para tu profesor..."
+                    rows={4}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
+                  />
+                </div>
+                <div className="mb-6">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Archivo (opcional)</label>
+                  <div
+                    onClick={() => fileRef.current?.click()}
+                    className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
+                  >
+                    <Paperclip size={18} className="text-gray-400" />
+                    <span className="text-sm text-gray-500">
+                      {modal.file ? modal.file.name : "Clic para adjuntar PDF, imagen o video"}
+                    </span>
+                    {modal.file && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setModal(m => m ? { ...m, file: null } : null); }}
+                        className="ml-auto text-gray-400 hover:text-red-500"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".pdf,.ppt,.pptx,image/*,video/*"
+                    className="hidden"
+                    onChange={e => setModal(m => m ? { ...m, file: e.target.files?.[0] ?? null } : null)}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={cerrarModal}
+                    disabled={modal.subiendo}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleEntregar}
+                    disabled={modal.subiendo}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
+                  >
+                    {modal.subiendo ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send size={14} />
+                    )}
+                    {modal.subiendo ? "Enviando..." : "Entregar"}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-gray-900">Mis Tareas</h1>
           <p className="text-gray-500 mt-1">Tareas publicadas por tus profesores</p>
         </motion.div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: "Total", value: tareas.length, icon: ClipboardList, color: "blue" },
-            { label: "Pendientes", value: tareas.filter(t => getDiasRestantes(t.dueDate) >= 0).length, icon: Clock, color: "orange" },
-            { label: "Vencidas", value: tareas.filter(t => getDiasRestantes(t.dueDate) < 0).length, icon: AlertCircle, color: "red" },
+            { label: "Pendientes", value: tareas.filter(t => getDiasRestantes(t.dueDate) >= 0 && !entregadas.has(t.id)).length, icon: Clock, color: "orange" },
+            { label: "Entregadas", value: entregadas.size, icon: CheckCircle, color: "green" },
           ].map((s, i) => (
             <motion.div
               key={s.label}
@@ -136,7 +258,6 @@ export default function TareasEstudiantePage() {
           ))}
         </div>
 
-        {/* Filtros */}
         <div className="flex gap-2">
           {[
             { id: "todas", label: "Todas" },
@@ -175,8 +296,6 @@ export default function TareasEstudiantePage() {
                 const dias = getDiasRestantes(t.dueDate);
                 const estado = getEstadoColor(dias);
                 const yaEntregada = entregadas.has(t.id);
-                const cargando = entregando === t.id;
-
                 return (
                   <motion.div
                     key={t.id}
@@ -210,7 +329,6 @@ export default function TareasEstudiantePage() {
                           <span>Puntaje máximo: {t.maxScore}</span>
                         </div>
                       </div>
-
                       {yaEntregada ? (
                         <div className="flex items-center gap-1 text-green-600 text-sm font-medium px-4 py-2">
                           <CheckCircle size={16} />
@@ -218,22 +336,16 @@ export default function TareasEstudiantePage() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleEntregar(t)}
-                          disabled={cargando || dias < 0}
+                          onClick={() => abrirModal(t)}
+                          disabled={dias < 0}
                           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
                             dias < 0
                               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                              : cargando
-                              ? "bg-blue-400 text-white cursor-wait"
                               : "bg-blue-600 text-white hover:bg-blue-700"
                           }`}
                         >
-                          {cargando ? (
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Send size={14} />
-                          )}
-                          {cargando ? "Enviando..." : dias < 0 ? "Vencida" : "Entregar"}
+                          <Send size={14} />
+                          {dias < 0 ? "Vencida" : "Entregar"}
                         </button>
                       )}
                     </div>
