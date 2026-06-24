@@ -14,6 +14,7 @@ const ADN = lazy(() => import("@/components/3d/biologia/ADN"));
 const Celula = lazy(() => import("@/components/3d/biologia/Celula"));
 const SistemaSolar = lazy(() => import("@/components/3d/fisica/SistemaSolar"));
 const MovimientoParabolico = lazy(() => import("@/components/3d/fisica/MovimientoParabolico"));
+const CircuitoElectrico = lazy(() => import("@/components/3d/fisica/CircuitoElectrico"));
 
 function Loader3D() {
   return (
@@ -43,6 +44,7 @@ const modelos = {
   fisica: [
     { id: "sistemasolar", label: "Sistema Solar", descripcion: "Simulación orbital de los planetas." },
     { id: "parabolico", label: "Movimiento Parabólico", descripcion: "Simulación de tiro parabólico con controles." },
+    { id: "circuito", label: "Circuito Eléctrico", descripcion: "Batería, resistencia y LED conectados en serie." },
   ],
 };
 
@@ -55,6 +57,7 @@ function renderModelo(id: string, onHover: (info: any) => void) {
     case "celula": return <Celula onHover={onHover} />;
     case "sistemasolar": return <SistemaSolar onHover={onHover} />;
     case "parabolico": return <MovimientoParabolico onHover={onHover} />;
+    case "circuito": return <CircuitoElectrico onHover={onHover} />;
     default: return null;
   }
 }
