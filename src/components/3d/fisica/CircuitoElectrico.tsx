@@ -99,7 +99,7 @@ function Cable({ start, end }: { start: [number, number, number]; end: [number, 
   return (
     <mesh position={mid} quaternion={quaternion}>
       <cylinderGeometry args={[0.04, 0.04, length, 8]} />
-      <meshStandardMaterial color="#333333" roughness={0.6} />
+      <meshStandardMaterial color="#ffffff" roughness={0.6} />
     </mesh>
   );
 }

@@ -12,6 +12,7 @@ const Molecula = lazy(() => import("@/components/3d/quimica/Molecula"));
 const CO2 = lazy(() => import("@/components/3d/quimica/CO2"));
 const ADN = lazy(() => import("@/components/3d/biologia/ADN"));
 const Celula = lazy(() => import("@/components/3d/biologia/Celula"));
+const Corazon = lazy(() => import("@/components/3d/biologia/Corazon"));
 const SistemaSolar = lazy(() => import("@/components/3d/fisica/SistemaSolar"));
 const MovimientoParabolico = lazy(() => import("@/components/3d/fisica/MovimientoParabolico"));
 const CircuitoElectrico = lazy(() => import("@/components/3d/fisica/CircuitoElectrico"));
@@ -40,6 +41,7 @@ const modelos = {
   biologia: [
     { id: "adn", label: "Doble Hélice ADN", descripcion: "Estructura del ácido desoxirribonucleico." },
     { id: "celula", label: "Célula Animal", descripcion: "Célula eucariota con orgánulos interactivos." },
+    { id: "corazon", label: "Corazón Humano", descripcion: "Las 4 cámaras del corazón y sus vasos principales." },
   ],
   fisica: [
     { id: "sistemasolar", label: "Sistema Solar", descripcion: "Simulación orbital de los planetas." },
@@ -55,6 +57,7 @@ function renderModelo(id: string, onHover: (info: any) => void) {
     case "co2": return <CO2 onHover={onHover} />;
     case "adn": return <ADN onHover={onHover} />;
     case "celula": return <Celula onHover={onHover} />;
+    case "corazon": return <Corazon onHover={onHover} />;
     case "sistemasolar": return <SistemaSolar onHover={onHover} />;
     case "parabolico": return <MovimientoParabolico onHover={onHover} />;
     case "circuito": return <CircuitoElectrico onHover={onHover} />;
