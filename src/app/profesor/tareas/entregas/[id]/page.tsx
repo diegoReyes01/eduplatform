@@ -15,6 +15,7 @@ interface Submission {
   status: string;
   submittedAt: string;
   student: { firstName: string; lastName: string; email: string };
+  grade: { score: number; maxScore: number; feedback: string | null } | null;
 }
 
 export default function EntregasPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +23,9 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [tarea, setTarea] = useState<{ title: string; maxScore: number } | null>(null);
+  const [scoreInputs, setScoreInputs] = useState<Record<string, string>>({});
+  const [feedbackInputs, setFeedbackInputs] = useState<Record<string, string>>({});
+  const [calificando, setCalificando] = useState<string | null>(null);
 
   useEffect(() => {
     const cargar = async () => {
@@ -48,6 +52,34 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
     cargar();
   }, [id]);
 
+  const calificar = async (submissionId: string) => {
+    const score = scoreInputs[submissionId];
+    if (!score) return;
+    setCalificando(submissionId);
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/grades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          submissionId,
+          score: parseFloat(score),
+          feedback: feedbackInputs[submissionId] || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSubmissions((prev) =>
+          prev.map((s) => (s.id === submissionId ? { ...s, status: "GRADED", grade: data.data } : s))
+        );
+      }
+    } catch {
+      // silencioso
+    } finally {
+      setCalificando(null);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -58,7 +90,7 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Entregas</h1>
-              {tarea && <p className="text-gray-500 text-sm">{tarea.title} x B7 Puntaje: {tarea.maxScore}</p>}
+              {tarea && <p className="text-gray-500 text-sm">{tarea.title} - Puntaje: {tarea.maxScore}</p>}
             </div>
           </div>
         </motion.div>
@@ -66,8 +98,8 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: "Total", value: submissions.length, color: "blue" },
-            { label: "A tiempo", value: submissions.filter(s => !s.isLate).length, color: "green" },
-            { label: "Atrasadas", value: submissions.filter(s => s.isLate).length, color: "orange" },
+            { label: "A tiempo", value: submissions.filter((s) => !s.isLate).length, color: "green" },
+            { label: "Atrasadas", value: submissions.filter((s) => s.isLate).length, color: "orange" },
           ].map((s, i) => (
             <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
               <p className="text-2xl font-bold text-gray-800">{s.value}</p>
@@ -144,6 +176,42 @@ export default function EntregasPage({ params }: { params: Promise<{ id: string 
                       ))}
                     </div>
                   )}
+                  <div className="mt-3 ml-12">
+                    {s.grade ? (
+                      <div className="flex items-center gap-2 text-sm bg-green-50 text-green-700 rounded-xl p-3 w-fit">
+                        <CheckCircle size={14} />
+                        Calificado: {s.grade.score}/{s.grade.maxScore}
+                        {s.grade.feedback && <span className="text-green-600 text-xs ml-2">- {s.grade.feedback}</span>}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max={tarea ? tarea.maxScore : 100}
+                          step="0.1"
+                          placeholder={"Nota (0-" + (tarea ? tarea.maxScore : 100) + ")"}
+                          value={scoreInputs[s.id] || ""}
+                          onChange={(e) => setScoreInputs({ ...scoreInputs, [s.id]: e.target.value })}
+                          className="bg-gray-100 rounded-xl px-3 py-1.5 text-sm outline-none w-32"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Comentario (opcional)"
+                          value={feedbackInputs[s.id] || ""}
+                          onChange={(e) => setFeedbackInputs({ ...feedbackInputs, [s.id]: e.target.value })}
+                          className="bg-gray-100 rounded-xl px-3 py-1.5 text-sm outline-none flex-1 min-w-40"
+                        />
+                        <button
+                          onClick={() => calificar(s.id)}
+                          disabled={!scoreInputs[s.id] || calificando === s.id}
+                          className="bg-blue-600 text-white rounded-xl px-4 py-1.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {calificando === s.id ? "Guardando..." : "Calificar y publicar"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
