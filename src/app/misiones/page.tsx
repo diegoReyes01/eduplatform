@@ -24,6 +24,17 @@ interface ExperienceDB {
   level: { number: number; name: string; xpRequired: number; xpMax: number };
 }
 
+interface AchievementDB {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  emoji: string;
+  xp: number;
+  categoria: string;
+  obtenido: boolean;
+  fecha: string | null;
+}
+
 function BarraProgreso({ valor, max, color }: { valor: number; max: number; color: string }) {
   const pct = Math.min(100, Math.round((valor / max) * 100));
   return (
@@ -83,14 +94,6 @@ function TarjetaMision({ mision }: { mision: MisionDB }) {
   );
 }
 
-const INSIGNIAS = [
-  { id: 1, nombre: "Explorador", emoji: "🗺️", descripcion: "Visita todas las secciones", desbloqueada: true },
-  { id: 2, nombre: "Científico", emoji: "🔬", descripcion: "Explora 10 modelos 3D", desbloqueada: true },
-  { id: 3, nombre: "Estudiante Ejemplar", emoji: "🌟", descripcion: "Promedio mayor a 6.5", desbloqueada: false },
-  { id: 4, nombre: "Maestro de Química", emoji: "⚗️", descripcion: "Completa todas las tareas de Química", desbloqueada: false },
-  { id: 5, nombre: "Maestro de Física", emoji: "⚛️", descripcion: "Aprueba todas las evaluaciones de Física", desbloqueada: false },
-  { id: 6, nombre: "Maestro de Biología", emoji: "🧬", descripcion: "Explora todos los modelos de Biología", desbloqueada: true },
-];
 
 const XP_INFO = [
   { emoji: "🌅", label: "Login diario", xp: 10 },
@@ -104,6 +107,7 @@ export default function MisionesPage() {
   const [tab, setTab] = useState<"diarias" | "semanales" | "especiales" | "insignias">("diarias");
   const [misiones, setMisiones] = useState<MisionDB[]>([]);
   const [experience, setExperience] = useState<ExperienceDB | null>(null);
+  const [achievements, setAchievements] = useState<AchievementDB[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -111,14 +115,17 @@ export default function MisionesPage() {
       try {
         const token = localStorage.getItem("accessToken");
         const headers = { Authorization: `Bearer ${token}` };
-        const [expRes, misionesRes] = await Promise.all([
+        const [expRes, misionesRes, achievementsRes] = await Promise.all([
           fetch("/api/experience", { headers }),
           fetch("/api/misiones", { headers }),
+          fetch("/api/achievements", { headers }),
         ]);
         const expData = await expRes.json();
         const misionesData = await misionesRes.json();
+        const achievementsData = await achievementsRes.json();
         if (expData.success) setExperience(expData.data);
         if (misionesData.success) setMisiones(misionesData.data);
+        if (achievementsData.success) setAchievements(achievementsData.data);
       } catch {
         // silencioso
       } finally {
@@ -193,7 +200,7 @@ export default function MisionesPage() {
           {[
             { label: "Misiones diarias", value: `${diarias.filter(m => m.completada).length}/${diarias.length}`, icon: Flame, color: "text-orange-500", bg: "bg-orange-50" },
             { label: "Misiones semanales", value: `${semanales.filter(m => m.completada).length}/${semanales.length}`, icon: Trophy, color: "text-purple-500", bg: "bg-purple-50" },
-            { label: "Insignias", value: `${INSIGNIAS.filter(i => i.desbloqueada).length}/${INSIGNIAS.length}`, icon: Star, color: "text-yellow-500", bg: "bg-yellow-50" },
+            { label: "Insignias", value: `${achievements.filter(a => a.obtenido).length}/${achievements.length}`, icon: Star, color: "text-yellow-500", bg: "bg-yellow-50" },
             { label: "XP total", value: totalXp.toString(), icon: Zap, color: "text-blue-500", bg: "bg-blue-50" },
           ].map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
@@ -259,17 +266,19 @@ export default function MisionesPage() {
             {tab === "insignias" && (
               <motion.div key="insignias" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
                 className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                {INSIGNIAS.map((ins, i) => (
+                {achievements.length === 0
+                  ? <p className="text-gray-400 text-sm col-span-6 text-center py-8">No hay logros disponibles</p>
+                  : achievements.map((ins, i) => (
                   <motion.div key={ins.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: i * 0.05 }} whileHover={{ scale: 1.05 }}
                     className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center ${
-                      ins.desbloqueada ? "border-yellow-300 bg-yellow-50" : "border-gray-100 bg-gray-50 opacity-50"
+                      ins.obtenido ? "border-yellow-300 bg-yellow-50" : "border-gray-100 bg-gray-50 opacity-50"
                     }`}>
                     <span className="text-3xl">{ins.emoji}</span>
                     <p className="text-xs font-semibold text-gray-800">{ins.nombre}</p>
                     <p className="text-xs text-gray-400">{ins.descripcion}</p>
-                    {!ins.desbloqueada && <Lock size={12} className="text-gray-400" />}
-                    {ins.desbloqueada && <CheckCircle size={14} className="text-green-500" />}
+                    {!ins.obtenido && <Lock size={12} className="text-gray-400" />}
+                    {ins.obtenido && <CheckCircle size={14} className="text-green-500" />}
                   </motion.div>
                 ))}
               </motion.div>
