@@ -131,7 +131,53 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+    // Desbloqueo automático de logros
+    const logrosActivos = await prisma.achievement.findMany({
+      where: { isSecret: false },
+    });
 
+    for (const logro of logrosActivos) {
+      const criteria = logro.criteria as any;
+
+      // Verificar si ya lo tiene
+      const yaDesbloqueado = await prisma.userAchievement.findUnique({
+        where: { userId_achievementId: { userId, achievementId: logro.id } },
+      });
+      if (yaDesbloqueado) continue;
+
+      let cumple = false;
+
+      if (criteria.type === "totalXp") {
+        cumple = nuevoTotalXp >= criteria.count;
+      } else if (criteria.action) {
+        // Contar cuántas veces ha hecho esta acción
+        const count = await prisma.xpTransaction.count({
+          where: { experienceId: experience.id, source: criteria.action },
+        });
+        cumple = count >= criteria.count;
+      }
+
+      if (cumple) {
+        await prisma.userAchievement.create({
+          data: { userId, achievementId: logro.id },
+        });
+
+        if (logro.xpReward > 0) {
+          nuevoTotalXp += logro.xpReward;
+          nivelNuevo = await getNivel(nuevoTotalXp);
+          levelId = nivelNuevo?.id ?? nivel1.id;
+          currentXp = nivelNuevo ? nuevoTotalXp - nivelNuevo.xpRequired : nuevoTotalXp;
+          experienceActualizada = await prisma.experience.update({
+            where: { userId },
+            data: { totalXp: nuevoTotalXp, currentXp, levelId },
+            include: { level: true },
+          });
+          await prisma.xpTransaction.create({
+            data: { amount: logro.xpReward, reason: "Logro desbloqueado: " + logro.name, source: "LOGRO", experienceId: experience.id },
+          });
+        }
+      }
+    }
     return NextResponse.json(successResponse({ xpGanada, experience: experienceActualizada }));
   } catch (err) {
     console.error("[POST /api/experience]", err);
