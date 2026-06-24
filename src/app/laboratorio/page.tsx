@@ -9,6 +9,7 @@ import { FlaskConical, Dna, Atom } from "lucide-react";
 
 const Atomo = lazy(() => import("@/components/3d/quimica/Atomo"));
 const Molecula = lazy(() => import("@/components/3d/quimica/Molecula"));
+const CO2 = lazy(() => import("@/components/3d/quimica/CO2"));
 const ADN = lazy(() => import("@/components/3d/biologia/ADN"));
 const Celula = lazy(() => import("@/components/3d/biologia/Celula"));
 const SistemaSolar = lazy(() => import("@/components/3d/fisica/SistemaSolar"));
@@ -33,6 +34,7 @@ const modelos = {
   quimica: [
     { id: "atomo", label: "Átomo de Carbono", descripcion: "Estructura atómica con núcleo y electrones orbitando." },
     { id: "molecula", label: "Molécula H₂O", descripcion: "Molécula de agua con enlaces covalentes." },
+    { id: "co2", label: "Molécula CO2", descripcion: "Dioxido de carbono, estructura lineal con enlaces dobles." },
   ],
   biologia: [
     { id: "adn", label: "Doble Hélice ADN", descripcion: "Estructura del ácido desoxirribonucleico." },
@@ -48,6 +50,7 @@ function renderModelo(id: string, onHover: (info: any) => void) {
   switch (id) {
     case "atomo": return <Atomo onHover={onHover} />;
     case "molecula": return <Molecula onHover={onHover} />;
+    case "co2": return <CO2 onHover={onHover} />;
     case "adn": return <ADN onHover={onHover} />;
     case "celula": return <Celula onHover={onHover} />;
     case "sistemasolar": return <SistemaSolar onHover={onHover} />;
